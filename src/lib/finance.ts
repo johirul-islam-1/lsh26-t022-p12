@@ -13,8 +13,8 @@ export function money(value: number) {
   }).format(value);
 }
 
-export function getDashboardFixture(state: LedgerState) {
-  const thisMonth = monthKey(state.today);
+export function getDashboardFixture(state: LedgerState, selectedMonth?: string) {
+  const thisMonth = selectedMonth ?? monthKey(state.today);
   const [year, month] = thisMonth.split("-").map(Number);
   const previousDate = new Date(Date.UTC(year, month - 2, 1));
   const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -44,6 +44,9 @@ export function getDashboardFixture(state: LedgerState) {
     remaining: state.salaryBdt - spent,
     percent: state.salaryBdt > 0 ? (spent / state.salaryBdt) * 100 : 0,
     changePercent: previousSpent > 0 ? ((spent - previousSpent) / previousSpent) * 100 : 0,
+    changeAmount: spent - previousSpent,
+    month: thisMonth,
+    previousMonth,
     categories,
     largest,
   };

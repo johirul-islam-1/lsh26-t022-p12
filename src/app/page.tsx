@@ -4,6 +4,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Camera,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   Landmark,
@@ -49,6 +50,34 @@ function makeManualDraft(date: string): ManualExpenseDraft {
   };
 }
 
+function monthFromDate(date: string) {
+  return date.slice(0, 7);
+}
+
+function shiftMonth(month: string, delta: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + delta, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
+}
+
+function shortExpenseDate(date: string) {
+  const [year, monthNumber, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, monthNumber - 1, day)));
+}
+
 export default function Home() {
   const [ledger, setLedger] = useState<LedgerState>(initialLedger);
   const [scanOpen, setScanOpen] = useState(false);
@@ -63,56 +92,61 @@ export default function Home() {
   const [salaryOpen, setSalaryOpen] = useState(false);
   const [salaryInput, setSalaryInput] = useState(String(initialLedger.salaryBdt));
   const [salaryError, setSalaryError] = useState("");
+  const [activeMonth, setActiveMonth] = useState(() => monthFromDate(initialLedger.today));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-useEffect(() => {
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (!saved) return;
+  useEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
 
-  const timer = window.setTimeout(() => {
-    try {
-      setLedger(JSON.parse(saved) as LedgerState);
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, 0);
+    const timer = window.setTimeout(() => {
+      try {
+        const restored = JSON.parse(saved) as LedgerState;
+        setLedger(restored);
+        setActiveMonth(monthFromDate(restored.today));
+      } catch {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    }, 0);
 
-  return () => window.clearTimeout(timer);
-}, []);
+    return () => window.clearTimeout(timer);
+  }, []);
 
-  const dashboard = useMemo(() => getDashboardFixture(ledger), [ledger]);
+  const dashboard = useMemo(() => getDashboardFixture(ledger, activeMonth), [ledger, activeMonth]);
   const positiveChange = dashboard.changePercent >= 0;
+  const hasPreviousMonthSpending = dashboard.previousSpent > 0;
+  const activeMonthLabel = monthLabel(activeMonth);
+  const previousMonthLabel = monthLabel(dashboard.previousMonth);
+  const latestMonth = monthFromDate(ledger.today);
 
   function persistLedger(next: LedgerState) {
     setLedger(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-function appendExpense(expense: {
-  amountBdt: number;
-  date: string;
-  shop: string;
-  category: string;
-}) {
-  const nextToday =
-    expense.date > ledger.today
-      ? expense.date
-      : ledger.today;
+  function appendExpense(expense: {
+    amountBdt: number;
+    date: string;
+    shop: string;
+    category: string;
+  }) {
+    const nextToday = expense.date > ledger.today ? expense.date : ledger.today;
 
-  const next: LedgerState = {
-    ...ledger,
-    today: nextToday,
-    expenses: [
-      ...ledger.expenses,
-      {
-        id: `E-${Date.now()}`,
-        ...expense,
-      },
-    ],
-  };
+    const next: LedgerState = {
+      ...ledger,
+      today: nextToday,
+      expenses: [
+        ...ledger.expenses,
+        {
+          id: `E-${Date.now()}`,
+          ...expense,
+        },
+      ],
+    };
 
-  persistLedger(next);
-}
+    persistLedger(next);
+    setActiveMonth(monthFromDate(expense.date));
+  }
 
   function openManualExpense() {
     setSavedMessage("");
@@ -285,7 +319,33 @@ function appendExpense(expense: {
           <span>Everything saves locally in this browser; Gemini credentials stay server-side.</span>
         </div>
 
-        <section className="hero-grid" aria-label="Monthly summary">
+        <div className="month-toolbar" aria-label="Dashboard month">
+          <div>
+            <p className="eyebrow">VIEWING MONTH</p>
+            <strong>{activeMonthLabel}</strong>
+          </div>
+          <div className="month-nav">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="View previous month"
+              onClick={() => setActiveMonth((current) => shiftMonth(current, -1))}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="View next month"
+              disabled={activeMonth >= latestMonth}
+              onClick={() => setActiveMonth((current) => shiftMonth(current, 1))}
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        <section className="hero-grid" aria-label={`Monthly summary for ${activeMonthLabel}`}>
           <article className="metric metric-featured">
             <div className="metric-head"><span>Spent this month</span><CircleDollarSign size={18} /></div>
             <strong>{money(dashboard.spent)}</strong>
@@ -303,9 +363,13 @@ function appendExpense(expense: {
           </article>
 
           <article className="metric">
-            <div className="metric-head"><span>vs last month</span>{positiveChange ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}</div>
-            <strong>{Math.abs(dashboard.changePercent).toFixed(1)}%</strong>
-            <p>{positiveChange ? "higher" : "lower"} than last month&apos;s full total</p>
+            <div className="metric-head"><span>vs {previousMonthLabel}</span>{positiveChange ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}</div>
+            <strong>{hasPreviousMonthSpending ? `${Math.abs(dashboard.changePercent).toFixed(1)}%` : "—"}</strong>
+            <p>
+              {hasPreviousMonthSpending
+                ? `${money(Math.abs(dashboard.changeAmount))} ${positiveChange ? "higher" : "lower"} than ${previousMonthLabel}`
+                : `No spending recorded in ${previousMonthLabel}`}
+            </p>
           </article>
         </section>
 
@@ -325,14 +389,35 @@ function appendExpense(expense: {
             </div>
           </article>
 
-          <article className="panel" id="forecast">
-            <div className="panel-heading"><div><p className="eyebrow">NEXT BUILD</p><h2>Forecast & insights</h2></div><Sparkles size={20} /></div>
-            <div className="empty-feature">
-              <div className="empty-icon"><Sparkles size={22} /></div>
+          <article className="panel">
+            <div className="panel-heading">
+              <div><p className="eyebrow">TOP SPEND</p><h2>Largest expenses</h2></div>
+              <ReceiptText size={20} />
+            </div>
+            <div className="largest-list">
+              {dashboard.largest.length ? dashboard.largest.map((expense, index) => (
+                <div className="largest-expense" key={expense.id}>
+                  <div className="largest-rank" aria-hidden="true">{index + 1}</div>
+                  <div className="largest-copy">
+                    <strong>{expense.shop}</strong>
+                    <span>{expense.category} · {shortExpenseDate(expense.date)}</span>
+                  </div>
+                  <strong className="largest-amount">{money(expense.amountBdt)}</strong>
+                </div>
+              )) : <p className="subtle">No expenses recorded for {activeMonthLabel} yet.</p>}
+            </div>
+          </article>
+        </section>
+
+        <section className="panel forecast-panel" id="forecast">
+          <div className="panel-heading"><div><p className="eyebrow">NEXT BUILD</p><h2>Forecast & insights</h2></div><Sparkles size={20} /></div>
+          <div className="empty-feature compact-empty">
+            <div className="empty-icon"><Sparkles size={22} /></div>
+            <div>
               <h3>Deterministic forecast engine plugs in here</h3>
               <p>Next we calculate month-end spend, projected balance and 3+ amount-specific insights from real ledger data.</p>
             </div>
-          </article>
+          </div>
         </section>
 
         <section className="panel" id="pockets">

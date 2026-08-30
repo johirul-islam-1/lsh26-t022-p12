@@ -167,3 +167,28 @@ h2 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
 @media (max-width: 560px) {
   .metric-footer-row { align-items: flex-start; }
 }
+
+
+/* Build 1 monthly dashboard + largest expenses */
+.month-toolbar { margin: 0 0 14px; min-height: 68px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.month-toolbar .eyebrow { margin-bottom: 3px; }
+.month-toolbar strong { font-size: 16px; letter-spacing: -.02em; }
+.month-nav { display: flex; gap: 8px; }
+.month-nav .icon-button { width: 38px; height: 38px; }
+.month-nav .icon-button:disabled { opacity: .35; cursor: not-allowed; }
+.largest-list { display: grid; gap: 10px; }
+.largest-expense { min-height: 58px; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 11px; }
+.largest-rank { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 850; }
+.largest-copy { min-width: 0; display: grid; gap: 3px; }
+.largest-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.largest-copy span { color: var(--muted); font-size: 11px; }
+.largest-amount { font-size: 13px; white-space: nowrap; }
+.forecast-panel { margin-bottom: 14px; }
+.compact-empty { min-height: 126px; flex-direction: row; align-items: center; gap: 16px; }
+.compact-empty h3 { margin: 0 0 5px; }
+@media (max-width: 560px) {
+  .month-toolbar { align-items: flex-end; }
+  .largest-expense { grid-template-columns: 30px minmax(0, 1fr); }
+  .largest-amount { grid-column: 2; }
+  .compact-empty { align-items: flex-start; }
+}
