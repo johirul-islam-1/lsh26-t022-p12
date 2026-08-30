@@ -9,17 +9,19 @@ import {
   CircleDollarSign,
   Landmark,
   LoaderCircle,
+  Pencil,
   Plus,
   ReceiptText,
   Sparkles,
   Target,
+  Trash2,
   WalletCards,
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getDemoLedger } from "@/lib/demo";
 import { getDashboardFixture, getForecastFixture, getSavingsPocketPlan, money } from "@/lib/finance";
-import { CATEGORIES, type LedgerState, type ReceiptDraft } from "@/lib/types";
+import { CATEGORIES, type Expense, type LedgerState, type ReceiptDraft } from "@/lib/types";
 
 const initialLedger = getDemoLedger();
 const STORAGE_KEY = "ledgerly-state-v1";
@@ -113,6 +115,11 @@ export default function Home() {
   const [rateInput, setRateInput] = useState(String(initialLedger.dpsAnnualRatePercent));
   const [rateError, setRateError] = useState("");
   const [activeMonth, setActiveMonth] = useState(() => monthFromDate(initialLedger.today));
+  const [expensesOpen, setExpensesOpen] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpenseDraft, setEditExpenseDraft] = useState<ManualExpenseDraft>(() => makeManualDraft(initialLedger.today));
+  const [editExpenseError, setEditExpenseError] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -135,6 +142,12 @@ export default function Home() {
   const dashboard = useMemo(() => getDashboardFixture(ledger, activeMonth), [ledger, activeMonth]);
   const forecast = useMemo(() => getForecastFixture(ledger, activeMonth), [ledger, activeMonth]);
   const savingsPlan = useMemo(() => getSavingsPocketPlan(ledger), [ledger]);
+  const activeMonthExpenses = useMemo(
+    () => ledger.expenses
+      .filter((expense) => monthFromDate(expense.date) === activeMonth)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
+    [ledger.expenses, activeMonth],
+  );
   const positiveChange = dashboard.changePercent >= 0;
   const hasPreviousMonthSpending = dashboard.previousSpent > 0;
   const activeMonthLabel = monthLabel(activeMonth);
@@ -168,6 +181,85 @@ export default function Home() {
 
     persistLedger(next);
     setActiveMonth(monthFromDate(expense.date));
+  }
+
+  function openExpensesHistory() {
+    setSavedMessage("");
+    setEditingExpenseId(null);
+    setEditExpenseError("");
+    setPendingDeleteId(null);
+    setExpensesOpen(true);
+  }
+
+  function startEditingExpense(expense: Expense) {
+    setPendingDeleteId(null);
+    setEditExpenseError("");
+    setEditExpenseDraft({
+      amountBdt: expense.amountBdt,
+      date: expense.date,
+      shop: expense.shop,
+      category: expense.category,
+    });
+    setEditingExpenseId(expense.id);
+  }
+
+  function saveEditedExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingExpenseId) return;
+
+    const amount = Number(editExpenseDraft.amountBdt);
+    const date = editExpenseDraft.date.trim();
+    const shop = editExpenseDraft.shop.trim();
+    const category = editExpenseDraft.category.trim() || "Other";
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEditExpenseError("Enter an expense amount greater than zero.");
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setEditExpenseError("Choose a valid expense date.");
+      return;
+    }
+
+    if (!shop) {
+      setEditExpenseError("Enter a shop, merchant or expense name.");
+      return;
+    }
+
+    const nextToday = date > ledger.today ? date : ledger.today;
+    const next: LedgerState = {
+      ...ledger,
+      today: nextToday,
+      expenses: ledger.expenses.map((expense) =>
+        expense.id === editingExpenseId
+          ? { ...expense, amountBdt: amount, date, shop, category }
+          : expense,
+      ),
+    };
+
+    persistLedger(next);
+    setActiveMonth(monthFromDate(date));
+    setEditingExpenseId(null);
+    setEditExpenseError("");
+    setPendingDeleteId(null);
+    setSavedMessage(`Updated ${money(amount)} from ${shop}.`);
+  }
+
+  function deleteExpense(expenseId: string) {
+    const expense = ledger.expenses.find((item) => item.id === expenseId);
+    if (!expense) return;
+
+    persistLedger({
+      ...ledger,
+      expenses: ledger.expenses.filter((item) => item.id !== expenseId),
+    });
+
+    setPendingDeleteId(null);
+    setEditingExpenseId(null);
+    setEditExpenseError("");
+    setSavedMessage(`Deleted ${money(expense.amountBdt)} from ${expense.shop}.`);
   }
 
   function openManualExpense() {
@@ -465,7 +557,7 @@ export default function Home() {
           <article className="panel" id="expenses">
             <div className="panel-heading">
               <div><p className="eyebrow">BREAKDOWN</p><h2>Where the money went</h2></div>
-              <button className="text-button" type="button" disabled>View all <ChevronRight size={16} /></button>
+              <button className="text-button" type="button" onClick={openExpensesHistory}>View all <ChevronRight size={16} /></button>
             </div>
             <div className="category-list">
               {dashboard.categories.length ? dashboard.categories.slice(0, 6).map((category) => (
@@ -644,6 +736,149 @@ export default function Home() {
           <p className="dps-note">DPS is an illustration, not a bank quote. Each month the deposit is added first, then monthly interest is calculated from the stated annual rate, rounded half-up to the paisa, and compounded into the balance.</p>
         </section>
       </section>
+
+      {expensesOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="receipt-modal expense-history-modal" role="dialog" aria-modal="true" aria-labelledby="expense-history-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">EXPENSE HISTORY</p>
+                <h2 id="expense-history-title">All expenses — {activeMonthLabel}</h2>
+                <p className="modal-file">{activeMonthExpenses.length} transaction{activeMonthExpenses.length === 1 ? "" : "s"} · {money(dashboard.spent)} recorded</p>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Close expense history"
+                onClick={() => {
+                  setExpensesOpen(false);
+                  setEditingExpenseId(null);
+                  setPendingDeleteId(null);
+                  setEditExpenseError("");
+                }}
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            {editingExpenseId ? (
+              <form className="receipt-form expense-edit-form" onSubmit={saveEditedExpense}>
+                <div className="expense-edit-banner">
+                  <div>
+                    <strong>Edit saved expense</strong>
+                    <span>Saving immediately recalculates the dashboard, forecast and savings plan.</span>
+                  </div>
+                </div>
+
+                <label>
+                  Amount (BDT)
+                  <input
+                    inputMode="decimal"
+                    min="0.01"
+                    step="0.01"
+                    type="number"
+                    value={editExpenseDraft.amountBdt ?? ""}
+                    onChange={(event) => setEditExpenseDraft((current) => ({
+                      ...current,
+                      amountBdt: event.target.value === "" ? null : Number(event.target.value),
+                    }))}
+                    autoFocus
+                    required
+                  />
+                </label>
+
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    value={editExpenseDraft.date}
+                    onChange={(event) => setEditExpenseDraft((current) => ({ ...current, date: event.target.value }))}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Shop / expense name
+                  <input
+                    type="text"
+                    value={editExpenseDraft.shop}
+                    onChange={(event) => setEditExpenseDraft((current) => ({ ...current, shop: event.target.value }))}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Category
+                  <select
+                    value={editExpenseDraft.category}
+                    onChange={(event) => setEditExpenseDraft((current) => ({ ...current, category: event.target.value }))}
+                  >
+                    {CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                  </select>
+                </label>
+
+                {editExpenseError ? <p className="field-error" role="alert">{editExpenseError}</p> : null}
+
+                <div className="modal-actions">
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => {
+                      setEditingExpenseId(null);
+                      setEditExpenseError("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button className="button primary" type="submit">Save changes</button>
+                </div>
+              </form>
+            ) : activeMonthExpenses.length ? (
+              <div className="expense-history-list">
+                {activeMonthExpenses.map((expense) => (
+                  <article className="expense-history-row" key={expense.id}>
+                    <div className="expense-history-date">
+                      <strong>{shortExpenseDate(expense.date)}</strong>
+                      <span>{expense.category}</span>
+                    </div>
+                    <div className="expense-history-copy">
+                      <strong>{expense.shop}</strong>
+                      <span>{expense.date}</span>
+                    </div>
+                    <strong className="expense-history-amount">{money(expense.amountBdt)}</strong>
+                    <div className="expense-history-actions">
+                      {pendingDeleteId === expense.id ? (
+                        <div className="delete-confirm" role="group" aria-label={`Confirm deleting ${expense.shop}`}>
+                          <span>Delete?</span>
+                          <button className="history-action" type="button" onClick={() => setPendingDeleteId(null)}>Cancel</button>
+                          <button className="history-action danger" type="button" onClick={() => deleteExpense(expense.id)}>Confirm</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button className="history-action" type="button" onClick={() => startEditingExpense(expense)}>
+                            <Pencil size={14} /> Edit
+                          </button>
+                          <button className="history-action danger" type="button" onClick={() => setPendingDeleteId(expense.id)}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="expense-history-empty">
+                <ReceiptText size={22} />
+                <div>
+                  <strong>No expenses in {activeMonthLabel}</strong>
+                  <p>Add an expense or scan a receipt to start this month&apos;s ledger.</p>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
 
       {manualOpen ? (
         <div className="modal-backdrop" role="presentation">
