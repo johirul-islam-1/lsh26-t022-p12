@@ -124,3 +124,33 @@ h2 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
   .pocket-grid { grid-template-columns: 1fr; }
   h1 { font-size: 36px; }
 }
+
+/* Build 1 receipt scanner */
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.success-banner { margin-bottom: 14px; border: 1px solid #bed69a; background: #f2ffe0; color: #2f4a11; border-radius: 12px; padding: 12px 15px; font-size: 13px; font-weight: 650; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(10, 13, 9, .62); display: grid; place-items: center; padding: 20px; }
+.receipt-modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: 0 24px 70px rgba(0,0,0,.24); }
+.modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.modal-file { margin: 7px 0 0; color: var(--muted); font-size: 12px; word-break: break-word; }
+.icon-button { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); cursor: pointer; }
+.scan-progress, .scan-error { min-height: 170px; display: flex; align-items: center; gap: 14px; padding: 20px; background: var(--soft); border-radius: 13px; }
+.scan-progress p, .scan-error p { margin: 5px 0 0; color: var(--muted); line-height: 1.5; font-size: 13px; }
+.scan-error { display: grid; align-content: center; }
+.spin { animation: ledger-spin .9s linear infinite; }
+@keyframes ledger-spin { to { transform: rotate(360deg); } }
+.receipt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.receipt-form label { display: grid; gap: 7px; color: #3e453b; font-size: 12px; font-weight: 750; }
+.receipt-form input, .receipt-form select { width: 100%; min-height: 44px; border: 1px solid #ccd3c8; border-radius: 10px; background: white; color: var(--ink); padding: 0 12px; font-size: 16px; }
+.receipt-form input:focus, .receipt-form select:focus { outline: 3px solid rgba(126, 166, 0, .22); border-color: #7ea600; }
+.confidence-row { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; background: var(--soft); border-radius: 10px; padding: 11px 12px; font-size: 12px; color: var(--muted); }
+.confidence-row strong { color: var(--ink); }
+.field-error { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 13px; }
+.modal-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+@media (max-width: 560px) {
+  .modal-backdrop { padding: 10px; align-items: start; }
+  .receipt-modal { max-height: calc(100vh - 20px); margin-top: 10px; padding: 18px; }
+  .receipt-form { grid-template-columns: 1fr; }
+  .confidence-row, .field-error, .modal-actions { grid-column: auto; }
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
