@@ -1,455 +1,525 @@
-# Ledgerly — Personal Ledger Manager
+# Ledgerly — P12 Personal Ledger Manager
 
-> **LofiStack Hackathon 2026 · Problem P12 · Team LSH26-T022**
+> **LofiStack Hackathon 2026 · Team LSH26-T022 · Problem P12**
 
-**Live:** https://lsh26-t022-p12.vercel.app  
+**Live application:** https://lsh26-t022-p12.vercel.app
 **Repository:** https://github.com/johirul-islam-1/lsh26-t022-p12
 
-Ledgerly is a lightweight personal finance workspace for salaried users who want to understand where their monthly income is going, capture expenses quickly from receipts, forecast the rest of the month, and turn remaining cash into realistic savings goals.
+Ledgerly is a personal finance workspace for salaried users. It reduces receipt-entry friction, turns transactions into a month-aware dashboard, projects the likely month-end outcome, and converts expected surplus into realistic savings-pocket and DPS projections.
 
-The product deliberately combines **AI where perception is useful** (receipt extraction) with **deterministic finance logic where correctness matters** (totals, comparisons, forecasts, savings projections, and DPS calculations).
+The system uses **AI only where perception is useful**—reading receipt images—and keeps **financial arithmetic deterministic, testable, and explainable**.
+
+---
+
+## Table of Contents
+
+1. [Problem](#1-problem)
+2. [Product Vision](#2-product-vision)
+3. [Users and Jobs To Be Done](#3-users-and-jobs-to-be-done)
+4. [P12 Requirements and Proof](#4-p12-requirements-and-proof)
+5. [Solution Overview](#5-solution-overview)
+6. [Core User Flows](#6-core-user-flows)
+7. [System Design](#7-system-design)
+8. [Architecture Responsibilities](#8-architecture-responsibilities)
+9. [Financial Calculation Design](#9-financial-calculation-design)
+10. [Receipt Extraction Design](#10-receipt-extraction-design)
+11. [Expense History, Edit and Delete](#11-expense-history-edit-and-delete)
+12. [Persistence Model](#12-persistence-model)
+13. [Project Structure](#13-project-structure)
+14. [Local Setup](#14-local-setup)
+15. [Environment Variables](#15-environment-variables)
+16. [API](#16-api)
+17. [Testing and Verification](#17-testing-and-verification)
+18. [Production Deployment](#18-production-deployment)
+19. [Security and Privacy](#19-security-and-privacy)
+20. [Major Design Decisions](#20-major-design-decisions)
+21. [Known Limitations](#21-known-limitations)
+22. [What Is Real vs Seeded](#22-what-is-real-vs-seeded)
+23. [AI Usage and Verification](#23-ai-usage-and-verification)
+24. [Demo Path](#24-demo-path)
+25. [Team Contributions](#25-team-contributions)
+26. [Submission Metadata](#26-submission-metadata)
+27. [Future Roadmap](#27-future-roadmap)
 
 ---
 
 ## 1. Problem
 
-Personal expense tracking often fails for two reasons:
+A personal ledger is only useful if people actually keep it updated and can understand what the numbers mean.
 
-1. **Data entry is inconvenient.**  
-   Users receive paper receipts or bills, but manually typing the amount, date, merchant, and category for every expense creates friction.
+Traditional manual tracking creates two major problems.
 
-2. **A list of transactions does not answer financial questions.**  
-   Even after recording expenses, users still need to know:
-   - How much of the salary has already been spent?
-   - Which categories are consuming the most money?
-   - What changed compared with last month?
-   - At the current pace, how much will be spent by month end?
-   - Will there be money left or a shortfall?
-   - Can planned savings contributions actually be afforded?
-   - When will a savings goal be completed?
-   - What could the same monthly contribution become in a DPS-style deposit?
+### 1.1 Expense capture is high-friction
 
-A useful personal ledger therefore needs to go beyond bookkeeping and turn recorded transactions into **clear, actionable monthly decisions**.
+A user may receive a receipt or bill but still has to manually type:
 
----
+- amount;
+- transaction date;
+- merchant/shop;
+- category.
 
-## 2. Product Goal
+That friction makes expense tracking easy to abandon.
 
-Ledgerly is designed around one primary job:
+### 1.2 Transaction lists do not answer financial questions
 
-> **Help a salaried user understand the current month, anticipate the month-end outcome, and make realistic savings decisions with minimal data-entry friction.**
+Even after recording expenses, the user still needs to know:
 
-The solution focuses on four connected workflows:
+- How much salary has already been spent?
+- How much money remains?
+- Which categories are consuming the most money?
+- What are the largest individual expenses?
+- How does this month compare with last month?
+- At the current spending pace, what will the month-end total be?
+- Will there be money left or a shortfall?
+- Can planned monthly savings contributions actually be afforded?
+- When will a savings goal be completed?
+- What would a DPS-style monthly deposit return over the same period?
 
-1. Capture expenses manually or from a receipt.
-2. Understand the current and previous month.
-3. Forecast the rest of the month with number-backed insights.
-4. Convert expected surplus into measurable savings-pocket plans and DPS projections.
-
----
-
-## 3. Required P12 Capabilities
-
-### 3.1 Salary and Expense Capture
-
-The user can:
-
-- set or update a monthly salary;
-- manually add an expense;
-- upload a receipt/bill image;
-- extract the receipt amount, date, shop/merchant and category;
-- review the extracted values before saving;
-- correct extracted values when AI/OCR is imperfect;
-- persist the saved ledger in the browser.
-
-Supported receipt formats:
-
-- JPEG
-- PNG
-- WebP
-
-Maximum receipt size:
-
-- 8 MB
+The real product problem is therefore not just **expense storage**. It is turning raw transactions into **monthly financial decisions**.
 
 ---
 
-### 3.2 Monthly Dashboard
+## 2. Product Vision
 
-For the selected month, Ledgerly presents:
+Ledgerly is built around one job:
 
-- total spent;
-- salary;
-- available balance;
-- comparison with the previous month;
-- category-wise spending breakdown;
-- largest expenses;
-- month navigation.
+> **Help a salaried user capture expenses quickly, understand the current month, anticipate the month-end outcome, and make realistic savings decisions.**
 
-The dashboard is intentionally month-aware so expenses from different months are not silently mixed together.
-
----
-
-### 3.3 Forecast and Written Insights
-
-For the active current month, the forecasting engine estimates the expected total monthly spend using the observed spending pace.
-
-The primary formula is:
+The product deliberately connects four stages:
 
 ```text
-Projected monthly spend
-= spending recorded so far / elapsed days × days in month
+Capture
+  ↓
+Understand
+  ↓
+Forecast
+  ↓
+Plan
 ```
 
-From that projection the system derives:
+This makes the ledger useful after every new transaction instead of acting as a passive record.
+
+---
+
+## 3. Users and Jobs To Be Done
+
+### Primary user
+
+A salaried individual who wants a simple monthly view of personal spending without using a complex accounting system.
+
+### Core jobs
+
+The user wants to:
+
+1. record an expense quickly;
+2. correct receipt extraction before saving;
+3. see monthly totals and categories;
+4. compare with the previous month;
+5. understand likely month-end spending;
+6. know whether the month will end with money left or a shortfall;
+7. create savings goals;
+8. understand whether planned contributions are affordable;
+9. compare the same contribution with a DPS-style return;
+10. correct or delete a saved transaction if it was entered incorrectly.
+
+---
+
+## 4. P12 Requirements and Proof
+
+| Requirement | Status | Product proof | Implementation proof |
+| --- | --- | --- | --- |
+| **R1 — Salary + expenses + receipt upload and editable extraction** | Complete | `Add expense`, `Scan receipt`, extraction review before save | `src/app/page.tsx`, `src/app/api/receipt/route.ts` |
+| **R2 — Monthly dashboard** | Complete | spent vs salary, available balance, category breakdown, largest expenses, previous-month comparison, month navigation | `src/app/page.tsx`, `src/lib/finance.ts` |
+| **R3 — Forecast + written insights** | Complete | projected monthly spend, expected remaining spend, expected money left/shortfall, 3 amount-backed insights | `src/app/page.tsx`, `src/lib/finance.ts` |
+| **R4 — Savings pockets + completion + DPS comparison** | Complete | target, item details, monthly contribution, forecast-adjusted affordability, completion date, DPS return | `src/app/page.tsx`, `src/lib/finance.ts` |
+
+### Additional ledger-management UX
+
+Beyond the required four flows, Ledgerly also provides:
+
+- `View all` expense history for the selected month;
+- edit saved expense;
+- delete saved expense with confirmation;
+- automatic recalculation after edit/delete;
+- browser persistence after refresh.
+
+---
+
+## 5. Solution Overview
+
+Ledgerly separates probabilistic work from deterministic work.
 
 ```text
-Expected remaining spending
-= projected monthly spend - spending recorded so far
+Receipt image
+   │
+   ▼
+Gemini multimodal extraction
+   │
+   ▼
+Editable user confirmation
+   │
+   ▼
+Saved expense
+   │
+   ├──────────────► Monthly dashboard
+   │
+   ├──────────────► Forecast + insights
+   │
+   └──────────────► Savings affordability + DPS
 ```
 
-and:
+### Probabilistic responsibility
 
-```text
-Expected month-end balance
-= salary - projected monthly spend
-```
-
-The interface also generates at least three deterministic written insights backed by actual category names and BDT amounts.
-
-This logic intentionally does **not** use a language model. Financial arithmetic should be reproducible and testable.
-
----
-
-### 3.4 Savings Pockets and DPS Projection
-
-Users can create savings pockets containing:
-
-- pocket name;
-- item/goal description;
-- target amount;
-- desired monthly contribution.
-
-Ledgerly compares planned monthly savings with the forecast month-end savings budget.
-
-If the total planned contribution is affordable, each pocket keeps its requested contribution.
-
-If the plan is larger than the forecast savings budget, the system scales contributions proportionally so the user can see an **affordable effective monthly contribution** instead of an unrealistic plan.
-
-For each pocket Ledgerly calculates:
-
-- target amount;
-- planned monthly contribution;
-- affordable monthly contribution;
-- estimated months to goal;
-- expected completion date;
-- DPS maturity value over the same time;
-- total deposits;
-- interest earned.
-
----
-
-## 4. Why This Solution
-
-A basic ledger could have stopped at CRUD transactions. Ledgerly instead connects the full decision chain:
-
-```text
-Receipt / manual expense
-        ↓
-Verified expense
-        ↓
-Monthly totals
-        ↓
-Category + previous-month context
-        ↓
-Month-end forecast
-        ↓
-Expected surplus / shortfall
-        ↓
-Affordable savings plan
-        ↓
-Completion date + DPS comparison
-```
-
-This makes every feature contribute to the next one.
-
-The architecture also separates probabilistic and deterministic responsibilities:
-
-```text
-AI
-└── receipt understanding only
-
-Deterministic TypeScript
-├── money arithmetic
-├── monthly aggregation
-├── comparisons
-├── forecasting
-├── insight selection
-├── savings affordability
-├── completion dates
-└── DPS compounding
-```
-
-That separation reduces the chance of hallucinated financial outputs and keeps the results explainable.
-
----
-
-## 5. User Experience
-
-### First-Time User Journey
-
-1. Open Ledgerly.
-2. Review or edit the monthly salary.
-3. Add an expense manually or scan a receipt.
-4. Review extracted receipt values.
-5. Correct anything that is wrong.
-6. Save the expense.
-7. Review the monthly dashboard.
-8. Read forecast and spending insights.
-9. Create or review savings pockets.
-10. Adjust the DPS rate if needed.
-11. Refresh the page and continue from the persisted ledger.
-
-### Returning User Journey
-
-A returning user can immediately:
-
-- continue from locally persisted ledger data;
-- navigate months;
-- add a new expense;
-- scan another receipt;
-- inspect updated forecast numbers;
-- review savings feasibility.
-
-### Failure and Recovery UX
-
-The product includes handling for:
-
-- receipt upload validation;
-- unsupported file types;
-- oversized files;
-- provider/API failures;
-- retryable receipt extraction;
-- editable extraction results;
-- empty months;
-- empty spending categories;
-- invalid form values;
-- loading states;
-- user-visible errors.
-
-A failed receipt scan does not invalidate the rest of the ledger. Manual expense entry remains available.
-
----
-
-## 6. System Design
-
-### Architecture Overview
-
-```mermaid
-flowchart LR
-    U[User / Browser]
-
-    subgraph Client["Next.js Client UI"]
-        UI[Ledgerly Dashboard]
-        LS[(Browser localStorage)]
-        FIN[Deterministic Finance Engine]
-    end
-
-    subgraph Server["Next.js Server"]
-        API["POST /api/receipt"]
-        VALIDATE[File + Input Validation]
-    end
-
-    AI["Google Gemini"]
-
-    U --> UI
-    UI <--> LS
-    UI --> FIN
-    UI -->|Receipt image| API
-    API --> VALIDATE
-    VALIDATE -->|Image + extraction prompt| AI
-    AI -->|Structured receipt fields| API
-    API -->|Editable extraction result| UI
-```
-
----
-
-## 7. Architectural Responsibilities
-
-### Browser / UI Layer
-
-Responsible for:
-
-- user interaction;
-- month selection;
-- expense and salary forms;
-- receipt review/edit flow;
-- dashboard rendering;
-- forecast presentation;
-- savings-pocket management;
-- DPS-rate editing;
-- local persistence.
-
-### Finance Domain Layer
-
-Responsible for deterministic calculations including:
-
-- BDT totals;
-- category aggregation;
-- largest-expense ranking;
-- previous-month comparison;
-- forecast calculations;
-- written insight construction;
-- savings affordability;
-- goal duration;
-- completion date;
-- DPS return.
-
-### Receipt API Layer
-
-Responsible for:
-
-- accepting multipart image upload;
-- validating file type and size;
-- keeping the Gemini API key server-side;
-- calling the configured Gemini model;
-- parsing structured extraction output;
-- retry/fallback handling;
-- returning editable receipt data to the client.
-
-### External AI Provider
-
-Gemini is used only to interpret the receipt image and suggest:
+AI is responsible only for interpreting receipt images and suggesting:
 
 - amount;
 - date;
 - merchant/shop;
 - category;
-- confidence/quality information.
+- confidence.
 
-The extracted values are treated as **draft data**, not unquestionable truth. The user can correct them before saving.
+### Deterministic responsibility
+
+TypeScript finance logic is responsible for:
+
+- money aggregation;
+- category totals;
+- largest expenses;
+- month comparison;
+- forecast;
+- written insight selection;
+- savings affordability;
+- goal duration;
+- completion date;
+- DPS compounding.
+
+This keeps important financial outputs reproducible and avoids asking a generative model to perform core finance calculations.
 
 ---
 
-## 8. Data Flow
+## 6. Core User Flows
 
-### Receipt Capture Flow
+### 6.1 Manual expense flow
 
 ```text
-User selects receipt
-        ↓
-Client validates basic selection
-        ↓
+Add expense
+  ↓
+Enter amount/date/shop/category
+  ↓
+Validate
+  ↓
+Save
+  ↓
+Persist
+  ↓
+Recalculate dashboard + forecast + savings
+```
+
+### 6.2 Receipt flow
+
+```text
+Scan receipt
+  ↓
+Choose JPG / PNG / WebP
+  ↓
 POST /api/receipt
-        ↓
-Server validates MIME type + size
-        ↓
-Gemini receipt extraction
-        ↓
-Structured result
-        ↓
-Editable review modal
-        ↓
-User confirms / corrects
-        ↓
-Expense appended to ledger
-        ↓
-localStorage updated
-        ↓
-Dashboard + forecast recomputed
+  ↓
+Server validates file
+  ↓
+Gemini extracts structured fields
+  ↓
+Editable review
+  ↓
+User corrects if needed
+  ↓
+Save
+  ↓
+Ledger recalculates
 ```
 
-### Monthly Analytics Flow
+### 6.3 Saved expense correction flow
 
 ```text
-Persisted ledger
-        ↓
-Filter expenses by active month
-        ↓
-Integer-paisa aggregation
-        ↓
-Spent / available
-        ↓
-Category totals
-        ↓
-Largest expenses
-        ↓
-Previous-month comparison
+View all
+  ↓
+Choose transaction
+  ↓
+Edit
+  ↓
+Prefilled form
+  ↓
+Save changes
+  ↓
+Same expense ID retained
+  ↓
+Ledger recalculates
 ```
 
-### Savings Planning Flow
+### 6.4 Delete flow
+
+```text
+View all
+  ↓
+Delete
+  ↓
+Inline confirmation
+  ├─ Cancel → no change
+  └─ Confirm → remove expense
+                    ↓
+               Persist
+                    ↓
+          Recalculate analytics
+```
+
+### 6.5 Savings flow
 
 ```text
 Current-month forecast
-        ↓
-Projected month-end balance
-        ↓
-max(balance, 0)
-        ↓
+  ↓
+Expected month-end balance
+  ↓
 Forecast savings budget
-        ↓
+  ↓
 Compare with planned pocket contributions
-        ↓
-Affordable contribution per pocket
-        ↓
-Months to target
-        ↓
-Completion date
-        ↓
-DPS projection over same duration
+  ↓
+Affordable effective contribution
+  ↓
+Months to goal
+  ↓
+Expected completion date
+  ↓
+DPS return over same duration
 ```
+
+---
+
+## 7. System Design
+
+```mermaid
+flowchart LR
+    U[User / Browser]
+
+    subgraph CLIENT["Next.js Client"]
+        PAGE["Ledgerly UI\nsrc/app/page.tsx"]
+        STORE[("localStorage\nledgerly-state-v1")]
+        FIN["Finance Engine\nsrc/lib/finance.ts"]
+    end
+
+    subgraph SERVER["Next.js Server"]
+        API["/api/receipt"]
+        VALIDATE["File + response validation"]
+    end
+
+    GEMINI["Google Gemini"]
+
+    U --> PAGE
+    PAGE <--> STORE
+    PAGE --> FIN
+    PAGE -->|"multipart receipt image"| API
+    API --> VALIDATE
+    VALIDATE --> GEMINI
+    GEMINI -->|"structured extraction"| API
+    API -->|"editable draft fields"| PAGE
+```
+
+### Data ownership
+
+```text
+Browser localStorage
+└── LedgerState
+    ├── today
+    ├── salaryBdt
+    ├── expenses[]
+    ├── pockets[]
+    └── dpsAnnualRatePercent
+```
+
+### Recalculation strategy
+
+Derived data is not independently persisted.
+
+Instead:
+
+```text
+LedgerState changes
+  ↓
+React state updates
+  ↓
+finance.ts recomputes derived data
+  ↓
+UI rerenders
+```
+
+This reduces synchronization bugs between raw transactions and calculated values.
+
+---
+
+## 8. Architecture Responsibilities
+
+### `src/app/page.tsx`
+
+Owns the primary product interaction:
+
+- salary editing;
+- manual expense creation;
+- receipt upload;
+- receipt review/correction;
+- month navigation;
+- expense history;
+- saved expense editing;
+- expense deletion;
+- dashboard rendering;
+- forecast rendering;
+- savings pocket UI;
+- DPS-rate editing;
+- persistence coordination.
+
+### `src/app/api/receipt/route.ts`
+
+Server-only receipt endpoint:
+
+- accepts receipt image;
+- validates MIME type;
+- validates file size;
+- protects Gemini API key from the browser;
+- requests structured receipt extraction;
+- validates response shape;
+- normalizes category;
+- returns safe user-visible errors.
+
+### `src/lib/finance.ts`
+
+Deterministic domain engine:
+
+- money formatting;
+- month filtering;
+- total spending;
+- previous-month totals;
+- category aggregation;
+- largest expenses;
+- pace forecast;
+- written insights;
+- DPS calculation;
+- savings-pocket planning.
+
+### `src/lib/types.ts`
+
+Shared domain types and allowed categories.
 
 ---
 
 ## 9. Financial Calculation Design
 
-### Money Representation
+### 9.1 Integer paisa
 
-Core financial calculations convert BDT values to **integer paisa** wherever practical.
+Financial values are converted to integer paisa where practical.
 
-This avoids relying on raw decimal floating-point arithmetic for values such as:
+Example:
 
 ```text
-BDT 10.10 + BDT 20.20
+BDT 98.21 → 9821 paisa
 ```
 
-Internally, those values are treated as integer minor units.
+This avoids common decimal floating-point issues during aggregation and DPS interest handling.
+
+### 9.2 Monthly spending
+
+For a selected month:
+
+```text
+spent = sum(expenses in selected month)
+```
+
+```text
+available = salary - spent
+```
+
+The previous month is calculated independently so different months are not mixed.
+
+### 9.3 Category breakdown
+
+Expenses are grouped by category and summed.
+
+The same source transactions drive:
+
+- category totals;
+- share of spending;
+- insight selection.
+
+### 9.4 Largest expenses
+
+Transactions for the active month are sorted by amount and the highest-value items are shown in the dashboard.
 
 ---
 
-### Forecast
+## 10. Forecast Design
 
 For the active current month:
 
 ```text
-projectedSpend = spentSoFar / elapsedDays × totalDaysInMonth
+projectedSpend
+= spentSoFar / elapsedDays × totalDaysInMonth
 ```
 
 ```text
-expectedRemainingSpend = max(projectedSpend - spentSoFar, 0)
+expectedRemainingSpend
+= max(projectedSpend - spentSoFar, 0)
 ```
 
 ```text
-projectedBalance = salary - projectedSpend
+projectedBalance
+= salary - projectedSpend
 ```
 
-Past months use actual recorded spending rather than pretending to forecast a completed period.
+Completed historical months use actual recorded spending instead of pretending to forecast a finished period.
+
+### Why this approach
+
+The hackathon dataset provides limited personal history. A complex ML model would add opacity and implementation risk without enough training history.
+
+The selected model is:
+
+- explainable;
+- deterministic;
+- easy to validate;
+- immediately useful.
 
 ---
 
-### Savings Affordability
+## 11. Written Insights
 
-Let:
+The insight layer is generated from deterministic numbers rather than an LLM.
+
+Insights reference real:
+
+- categories;
+- BDT amounts;
+- spending concentration;
+- pace/balance context.
+
+The current implementation produces at least three insights when sufficient spending data exists.
+
+This avoids hallucinated financial advice while still making the dashboard understandable.
+
+---
+
+## 12. Savings and DPS Design
+
+### 12.1 Forecast savings budget
 
 ```text
-forecastSavingsBudget = max(projectedBalance, 0)
+forecastSavingsBudget
+= max(projectedBalance, 0)
 ```
 
-and:
+### 12.2 Planned contribution
 
 ```text
-plannedMonthly = sum(all requested pocket contributions)
+plannedMonthly
+= sum(all pocket monthly contributions)
 ```
+
+### 12.3 Affordability
 
 If:
 
@@ -457,108 +527,172 @@ If:
 forecastSavingsBudget >= plannedMonthly
 ```
 
-then every pocket keeps its requested monthly contribution.
+then every pocket keeps its requested contribution.
 
 Otherwise:
 
 ```text
-fundingRatio = forecastSavingsBudget / plannedMonthly
+fundingRatio
+= forecastSavingsBudget / plannedMonthly
 ```
 
-and each pocket receives:
+and:
 
 ```text
 effectiveContribution
 = requestedContribution × fundingRatio
 ```
 
-This prevents the application from presenting savings commitments that exceed the expected month-end budget.
+This prevents Ledgerly from showing a savings plan that exceeds the amount expected to remain at month end.
 
----
+### 12.4 Completion duration
 
-### Goal Completion
-
-For a target amount and positive effective monthly contribution:
+For a positive effective contribution:
 
 ```text
 monthsToGoal
-= ceil(targetAmount / effectiveMonthlyContribution)
+= ceil(target / effectiveContribution)
 ```
 
-The completion date is derived from the number of monthly contribution cycles.
+A completion date is derived from that number of monthly contribution cycles.
 
----
-
-### DPS Rule
-
-Ledgerly follows the supplied DPS calculation rule:
+### 12.5 DPS rule
 
 For every month:
 
 ```text
-1. balance = balance + monthlyDeposit
+1. balance = balance + deposit
 
 2. interest
    = balance × annualRate / 12 / 100
 
-3. round monthly interest half-up to paisa
+3. round interest half-up to paisa
 
 4. balance = balance + roundedInterest
 ```
 
-Interest becomes part of the balance, therefore future months earn interest on previous interest.
+Interest joins the balance and therefore compounds in later months.
 
-The implementation uses integer paisa and a deterministic half-up rounding routine for the monthly interest calculation.
+The DPS result shown by Ledgerly is an illustrative calculation based on the entered annual rate; it is not a bank quotation or financial guarantee.
 
 ---
 
-## 10. Public-Case Validation
+## 13. Receipt Extraction Design
 
-The finance engine was locally regression-tested against the supplied P12 public dataset.
+### Accepted images
 
-Result:
+- JPEG
+- PNG
+- WebP
+- maximum 8 MB
+
+### Structured extraction fields
+
+The server asks Gemini for:
 
 ```text
-25 / 25 public cases passed
+amountBdt
+date
+shop
+category
+confidence
 ```
 
-The run covered different:
+The response is validated before the browser receives it.
 
-- salaries;
-- months and month lengths;
-- elapsed-day positions;
-- expense distributions;
-- categories;
-- savings targets;
-- monthly contributions;
-- DPS annual rates.
+### Human-in-the-loop correction
 
-The public-case validator was used as a local verification harness and is not required by the production runtime.
+AI output is **never silently committed** as financial truth.
 
-Passing public cases does not imply that hidden evaluation cases are known; it provides evidence that the deterministic implementation is consistent across the supplied scenarios.
+The extraction becomes an editable draft. The user can correct:
 
----
+- amount;
+- date;
+- merchant/shop;
+- category.
 
-## 11. Technology Stack
+Only then is the transaction saved.
 
-| Layer | Technology | Responsibility |
-|---|---|---|
-| Framework | Next.js 16 | Application shell, client/server routing |
-| UI runtime | React 19 | Interactive dashboard and forms |
-| Language | TypeScript | Typed application and finance logic |
-| AI integration | `@google/genai` | Receipt-image extraction |
-| Validation | Zod | Structured validation/parsing |
-| Icons | Lucide React | UI iconography |
-| Persistence | Browser `localStorage` | Hackathon ledger persistence |
-| Hosting | Vercel | Public production deployment |
+### Failure handling
 
-The project intentionally avoids adding a database, authentication platform, queue, or additional infrastructure that was not necessary to satisfy the hackathon workflow.
+Receipt scanning handles:
+
+- missing image;
+- unsupported file format;
+- bad file size;
+- missing Gemini configuration;
+- invalid provider response;
+- provider/extraction failure.
+
+Manual expense entry remains usable even when the receipt provider is unavailable.
 
 ---
 
-## 12. Project Structure
+## 14. Expense History, Edit and Delete
 
-The important repository structure is:
+The `View all` action opens the active month's expense history.
+
+Each transaction exposes:
+
+- date;
+- shop;
+- category;
+- amount;
+- edit action;
+- delete action.
+
+### Edit behaviour
+
+Edit uses the same validation rules as expense entry.
+
+The original expense ID is retained while editable fields are replaced.
+
+After save:
+
+- monthly total recalculates;
+- categories recalculate;
+- largest expenses recalculate;
+- forecast recalculates;
+- insights recalculate;
+- savings projections recalculate.
+
+### Delete behaviour
+
+Delete requires confirmation.
+
+After confirmation the transaction is removed and all derived views recompute from the remaining ledger.
+
+---
+
+## 15. Persistence Model
+
+The hackathon version uses browser `localStorage`.
+
+Key:
+
+```text
+ledgerly-state-v1
+```
+
+### Why localStorage
+
+For the hackathon scope it provides:
+
+- zero database setup;
+- no authentication dependency;
+- immediate persistence;
+- low deployment risk;
+- easy judge interaction.
+
+### Trade-off
+
+Data is browser/device-specific and is not synchronized to other devices.
+
+A commercial version would use authenticated server-side persistence.
+
+---
+
+## 16. Project Structure
 
 ```text
 lsh26-t022-p12/
@@ -572,183 +706,115 @@ lsh26-t022-p12/
 │   │   └── page.tsx
 │   │
 │   └── lib/
+│       ├── demo.ts
 │       ├── finance.ts
 │       └── types.ts
 │
 ├── public/
-│
+├── .env.example
+├── .gitignore
 ├── ARCHITECTURE.md
 ├── EVENT.md
 ├── LICENSES.md
 ├── README.md
 ├── evaluation-manifest.json
-│
-├── package.json
-├── package-lock.json
-├── tsconfig.json
 ├── eslint.config.mjs
 ├── next.config.ts
-├── next-env.d.ts
-└── .gitignore
+├── package.json
+├── package-lock.json
+└── tsconfig.json
 ```
 
-### Important Files
+The core judging paths are:
 
-#### `src/app/page.tsx`
-
-Main Ledgerly application UI and client-side product flow.
-
-It coordinates:
-
-- salary editing;
-- expense creation;
-- receipt scanning;
-- extraction review;
-- month selection;
-- analytics display;
-- forecast display;
-- savings-pocket actions;
-- DPS-rate changes;
-- local persistence.
-
-#### `src/app/api/receipt/route.ts`
-
-Server-side receipt extraction endpoint.
-
-Responsibilities:
-
-- upload validation;
-- API-key isolation;
-- Gemini request;
-- structured extraction;
-- provider retry/fallback behavior;
-- error responses.
-
-#### `src/lib/finance.ts`
-
-The deterministic finance engine.
-
-Contains logic for:
-
-- dashboard calculations;
-- BDT/paisa conversion;
-- monthly totals;
-- category aggregation;
-- ranking;
-- forecasting;
-- insights;
-- savings planning;
-- DPS projection.
-
-This is intentionally separate from the UI so financial behavior can be reasoned about and tested independently.
-
-#### `src/lib/types.ts`
-
-Shared domain types used by the ledger, expenses, pockets and finance functions.
-
-#### `evaluation-manifest.json`
-
-Judge-facing project metadata and proof paths for the required P12 capabilities.
-
-#### `LICENSES.md`
-
-Third-party dependency and licensing record.
-
-#### `ARCHITECTURE.md`
-
-Additional architecture notes and implementation rationale.
-
-#### `EVENT.md`
-
-Hackathon event initialization/evidence file.
+```text
+src/app/page.tsx
+src/app/api/receipt/route.ts
+src/lib/finance.ts
+src/lib/types.ts
+```
 
 ---
 
-## 13. Local Development
+## 17. Local Setup
 
-### Prerequisites
+### Requirements
 
-- Node.js
+- Node.js 20+
 - npm
-- a Gemini API key for receipt scanning
 
-Clone the repository:
+Clone:
 
 ```bash
 git clone https://github.com/johirul-islam-1/lsh26-t022-p12.git
 cd lsh26-t022-p12
 ```
 
-Install dependencies:
+Install:
 
 ```bash
 npm install
 ```
 
-Create:
+Run:
 
-```text
-.env.local
+```bash
+npm run dev
 ```
 
-with:
+Open:
+
+```text
+http://localhost:3000
+```
+
+### Running without a private API key
+
+The application can start and the manual ledger/dashboard/forecast/savings flows can run without a private key.
+
+Receipt AI extraction requires a Gemini API key in local development.
+
+The hosted production deployment already has its receipt-service environment configured.
+
+---
+
+## 18. Environment Variables
+
+Copy the example:
+
+```bash
+cp .env.example .env.local
+```
+
+Then set:
 
 ```env
 GEMINI_API_KEY=your_private_key_here
 GEMINI_MODEL=gemini-3.7-flash
 ```
 
-Never commit `.env.local`.
+`GEMINI_MODEL` is optional.
 
-Start the development server:
-
-```bash
-npm run dev
-```
-
-Then open:
+Never commit:
 
 ```text
-http://localhost:3000
+.env
+.env.local
+.env.production
+API keys
+tokens
+private credentials
 ```
 
 ---
 
-## 14. Quality Gates
-
-Run the following before release:
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-git diff --check
-```
-
-The application was validated through:
-
-- TypeScript type checking;
-- ESLint;
-- production Next.js build;
-- production URL testing;
-- receipt scan flow;
-- manual expense flow;
-- month navigation;
-- local persistence;
-- forecast verification;
-- savings-pocket verification;
-- DPS-rate verification;
-- 25 supplied public finance cases.
-
----
-
-## 15. API
+## 19. API
 
 ### `GET /api/receipt`
 
-Lightweight receipt-service health/configuration response used for production verification.
+Health/configuration check.
 
-Example shape:
+Example:
 
 ```json
 {
@@ -761,9 +827,14 @@ Example shape:
 
 ### `POST /api/receipt`
 
-Accepts a receipt image as multipart form data.
+Input:
 
-Accepted MIME types:
+```text
+multipart/form-data
+field: receipt
+```
+
+Accepted:
 
 ```text
 image/jpeg
@@ -771,279 +842,314 @@ image/png
 image/webp
 ```
 
-Maximum file size:
+Maximum:
 
 ```text
 8 MB
 ```
 
-Returns a structured extraction for user review rather than silently saving AI output.
+Success returns an editable structured extraction.
+
+Failure returns a safe status/code/message rather than exposing provider secrets.
 
 ---
 
-## 16. Persistence Strategy
+## 20. Testing and Verification
 
-Ledgerly uses browser `localStorage` for the hackathon build.
+Before final release:
 
-Why:
-
-- no account requirement in the problem;
-- instant local persistence;
-- very low deployment risk;
-- no database migration/setup;
-- sufficient for a judge-visible single-user personal ledger.
-
-What is persisted:
-
-- ledger state;
-- salary;
-- expenses;
-- savings pockets;
-- DPS rate and related product state.
-
-The application does not use a shared multi-user backend database.
-
-### Trade-Off
-
-This design optimizes hackathon reliability and setup simplicity, but data:
-
-- is browser/device-specific;
-- is not synchronized across devices;
-- can be removed if browser storage is cleared;
-- does not provide user accounts or cloud backup.
-
-A commercial version would replace or augment local persistence with authenticated server-side storage.
-
----
-
-## 17. Security and Privacy Notes
-
-- Gemini credentials remain server-side.
-- `.env.local` is excluded from Git.
-- Receipt extraction is routed through the server so the browser does not receive the secret API key.
-- Uploaded images are used for the extraction request; the Ledgerly data model persists the resulting ledger fields rather than maintaining a receipt-image archive.
-- No authentication is implemented in the hackathon version because the application uses device-local persistence rather than a shared user database.
-- The production API should receive rate limiting and stronger abuse controls before broad public commercial use.
-
----
-
-## 18. Reliability Decisions
-
-### Editable AI Output
-
-Receipt extraction is probabilistic. Therefore AI output is never treated as final financial truth.
-
-The user gets an editable confirmation step before saving.
-
-### Deterministic Finance
-
-Forecasts, dashboard totals and DPS returns do not depend on Gemini.
-
-If the AI provider fails:
-
-```text
-receipt scanning may degrade
+```bash
+npm run typecheck
+npm run lint
+npm run build
+git diff --check
 ```
 
-but:
+### Product smoke tests
 
-```text
-manual entry
-dashboard
-forecast
-savings planning
-DPS calculations
-```
+The final product should be manually verified for:
 
-remain conceptually independent.
-
-### Loading and Error States
-
-Provider latency and failures are surfaced to the user instead of creating silent waits.
-
----
-
-## 19. What Is Real vs. Seeded / Mocked
-
-### Real
-
-- manual expense capture;
-- receipt-image upload;
-- Gemini extraction;
-- editable extraction review;
-- salary updates;
-- monthly calculations;
-- previous-month comparison;
-- category aggregation;
+- edit salary;
+- add manual expense;
+- scan receipt;
+- edit extracted receipt before save;
+- month navigation;
+- category breakdown;
 - largest expenses;
-- forecast arithmetic;
-- amount-backed insights;
-- savings-pocket calculations;
-- DPS projection;
-- browser persistence;
-- production deployment.
+- previous-month comparison;
+- forecast;
+- 3 written insights;
+- new savings pocket;
+- DPS rate edit;
+- `View all`;
+- edit saved expense;
+- delete cancel;
+- delete confirm;
+- refresh persistence.
 
-### Seeded
+### Public-case regression
 
-The application includes an initial sample ledger so the dashboard is immediately understandable and judge-visible before the user adds their own data.
+The deterministic finance engine was locally tested against the supplied P12 public dataset.
 
-The seeded data is ordinary application state and can be changed through the interface.
-
-### Not Implemented / Not Pretended
-
-- bank-account integration;
-- real DPS bank account opening;
-- actual transfer of savings money;
-- cloud account synchronization;
-- multi-user authentication;
-- financial institution guarantees.
-
-The DPS result is an **illustrative calculation based on the stated annual rate and supplied compounding rule**, not a bank quotation.
-
----
-
-## 20. Key Product Decisions
-
-### AI for Extraction, Not Arithmetic
-
-Receipt interpretation benefits from multimodal AI. Finance calculations require deterministic correctness.
-
-Using one technology for both would have increased risk without improving the user experience.
-
-### Review Before Save
-
-OCR/AI can misread a date or amount. An editable review step protects ledger accuracy.
-
-### Month-Aware Ledger
-
-Expenses are displayed and calculated according to their transaction month.
-
-Adding a historical expense should not silently blend it into the selected/current month.
-
-### Forecast as an Explainable Baseline
-
-The pace-based forecast:
+Result:
 
 ```text
-spent / elapsed days × days in month
+25 / 25 public cases passed
 ```
 
-is intentionally simple, transparent and reproducible.
+The run covered varying:
 
-For a hackathon personal ledger, explainability is more valuable than an opaque predictive model with limited personal history.
+- salaries;
+- months;
+- month lengths;
+- elapsed-day positions;
+- expense distributions;
+- categories;
+- savings targets;
+- contribution values;
+- DPS annual rates.
 
-### Forecast-Aware Savings
+The public dataset is organizer-provided test material and is not required in the production repository.
 
-Savings plans should respond to projected reality.
-
-If forecast month-end money is lower than requested savings contributions, Ledgerly makes that constraint visible instead of presenting an impossible plan.
-
----
-
-## 21. Limitations
-
-The hackathon build intentionally has a small operational footprint.
-
-Current limitations include:
-
-- browser-local persistence only;
-- no authentication;
-- no cross-device sync;
-- no cloud backup;
-- receipt extraction quality depends on image quality and external AI availability;
-- no automatic bank/payment transaction import;
-- no recurring-expense engine;
-- no income sources beyond the monthly salary workflow;
-- forecast is based on current-month pace rather than a long-term statistical model;
-- savings pockets model planned contributions but do not move real money;
-- DPS output is illustrative, not financial advice or a bank guarantee;
-- no production-grade usage quotas/rate limiting for large-scale public traffic.
+Passing public cases is evidence of consistency with the published cases; it does not claim knowledge of hidden evaluation cases.
 
 ---
 
-## 22. Future Roadmap
+## 21. Production Deployment
 
-A production evolution could add:
+Production:
 
-### Persistence and Accounts
+```text
+https://lsh26-t022-p12.vercel.app
+```
 
-- authenticated user accounts;
-- managed database;
-- multi-device synchronization;
-- encrypted receipt storage;
-- exports and backup.
+For a runtime code change:
 
-### Finance Automation
+```bash
+npx vercel --prod
+```
 
-- recurring bills;
-- multiple income streams;
-- CSV/bank statement import;
-- transaction deduplication;
-- scheduled expense reminders;
-- budget caps by category.
+Verify:
 
-### Better Forecasting
+```bash
+curl -sS https://lsh26-t022-p12.vercel.app/api/receipt
+```
 
-After enough historical data exists:
+Then open the production site in a private/incognito browser and run the main smoke path.
 
-- recurring-vs-variable spending separation;
-- salary-cycle aware forecasting;
-- weekday/weekend behavior;
-- seasonality;
-- confidence ranges;
-- abnormal-spend detection.
+---
 
-Any future predictive model should still preserve a deterministic, explainable baseline.
+## 22. Security and Privacy
 
-### Savings
+- Gemini API credentials stay server-side.
+- Secret environment files are ignored by Git.
+- The browser does not receive the Gemini API key.
+- Receipt-image input is validated before provider use.
+- Receipt extraction output is validated before use.
+- Ledger persistence is local to the user's browser in this hackathon build.
+- No authentication or cloud user database is claimed.
+- No real money is transferred by savings pockets.
+- DPS results are illustrative calculations only.
 
-- current saved balance per pocket;
-- contribution history;
-- automatic priority allocation;
-- scenario comparison;
-- multiple deposit products/rates;
-- institution-specific product terms.
+A production financial application would additionally require:
 
-### Production Operations
-
+- authenticated storage;
+- encryption and retention policies;
 - API rate limiting;
-- structured monitoring;
 - audit logging;
-- provider usage limits;
-- privacy/retention policy;
-- disaster recovery;
-- accessibility audit;
-- localization.
+- monitoring;
+- stronger abuse prevention;
+- formal privacy/compliance review.
 
 ---
 
-## 23. Demo Path
+## 23. Major Design Decisions
 
-A concise judge demo can follow this sequence:
+### AI for perception, deterministic code for finance
+
+Gemini is used for receipt understanding only. Financial totals and projections remain deterministic.
+
+### Editable extraction before save
+
+Receipt AI is fallible. A human confirmation step prevents uncertain extraction from becoming unquestioned financial data.
+
+### Month-aware ledger
+
+Every expense is tied to its transaction month. Historical/current data is not silently blended.
+
+### Derived analytics are recomputed
+
+Dashboard, forecast and savings outputs are computed from the ledger state rather than separately persisted.
+
+### Integer-paisa handling
+
+Minor-unit arithmetic improves deterministic money handling, especially DPS rounding.
+
+### Explainable pace forecast
+
+The forecast uses a transparent spending-pace formula instead of an opaque predictive model.
+
+### Forecast-aware savings
+
+Savings contributions are reduced proportionally when the projected month-end budget cannot support the full requested plan.
+
+### Local persistence for hackathon reliability
+
+No database/auth dependency was added where the problem did not require it.
+
+### Edit/delete placed on transactions, not summary cards
+
+`Spent this month` remains an aggregate metric. Corrections are made on individual transactions through `View all`.
+
+---
+
+## 24. Known Limitations
+
+- Browser-local persistence only.
+- No account system.
+- No cross-device synchronization.
+- No cloud backup.
+- No bank/payment-provider integration.
+- No automatic transaction import.
+- No recurring-expense engine.
+- Receipt extraction depends on image quality and Gemini availability.
+- Forecast is a pace-based estimate, not a long-history predictive model.
+- Savings pockets do not transfer real funds.
+- DPS calculations are illustrative and do not model institution-specific taxes, fees or product conditions.
+- No production-scale rate limiting or abuse protection.
+- No collaboration/multi-user ledger.
+
+---
+
+## 25. What Is Real vs Seeded
+
+### Real functionality
+
+- salary editing;
+- manual expense capture;
+- receipt image upload;
+- Gemini extraction;
+- editable extraction confirmation;
+- monthly dashboard;
+- category breakdown;
+- largest expenses;
+- previous-month comparison;
+- month navigation;
+- forecast;
+- written amount-backed insights;
+- savings pockets;
+- forecast-aware affordability;
+- completion date;
+- DPS calculation;
+- DPS-rate editing;
+- expense history;
+- edit saved expense;
+- delete saved expense;
+- local persistence;
+- deployed production application.
+
+### Seeded/demo data
+
+The app starts with sample ledger state so the financial dashboard is immediately understandable during evaluation.
+
+The user can add, edit and delete ledger data through the application.
+
+### Not claimed
+
+- real bank account connection;
+- actual DPS account opening;
+- automatic fund transfer;
+- cloud synchronization;
+- authenticated multi-user service.
+
+---
+
+## 26. AI Usage and Verification
+
+AI usage is disclosed in `evaluation-manifest.json` and `LICENSES.md`.
+
+### OpenAI ChatGPT
+
+Used for:
+
+- implementation planning;
+- code drafting/review;
+- debugging assistance;
+- test-harness assistance;
+- architecture/documentation drafting.
+
+Team verification included:
 
 ```text
-1. Open monthly dashboard
-2. Show salary + current spending
-3. Scan a receipt
-4. Review extracted amount/date/shop/category
-5. Correct a value and save
-6. Show dashboard recalculation
-7. Navigate previous/current month
-8. Show category breakdown + largest expenses
-9. Show projected spend + month-end balance
-10. Show three written amount-backed insights
-11. Create/open savings pocket
-12. Show affordable contribution + completion date
-13. Change DPS rate
-14. Show DPS maturity/deposit/interest
-15. Refresh and confirm persistence
+TypeScript typecheck
+ESLint
+production build
+manual local tests
+manual production tests
+25/25 P12 public-case regression
 ```
 
-This flow demonstrates the product through user-visible evidence rather than implementation claims.
+### Google Gemini
+
+Used at runtime for receipt image understanding.
+
+Gemini output is verified through:
+
+- structured response schema;
+- server-side validation;
+- category normalization;
+- editable human confirmation before save;
+- manual receipt-flow testing.
+
+The team remains responsible for the submitted implementation and calculations.
 
 ---
 
-## 24. Submission Metadata
+## 27. Demo Path
+
+A strong demo can be completed in under three minutes:
+
+```text
+1. Open Ledgerly dashboard
+2. Show salary and current spending
+3. Scan a receipt
+4. Show extracted amount/date/shop/category
+5. Correct one field before save
+6. Save and show dashboard recalculation
+7. Show View all expense history
+8. Edit one saved expense
+9. Show delete confirmation
+10. Show category breakdown + largest expenses
+11. Navigate previous/current month
+12. Show forecast + expected money left/shortfall
+13. Show 3 amount-backed insights
+14. Show savings pocket + completion date
+15. Edit DPS rate and show DPS return
+16. Refresh and confirm persistence
+```
+
+The demo should focus on working product evidence rather than terminal output.
+
+---
+
+## 28. Problem-Solving Method
+
+The team broke P12 into four independently verifiable domain flows: expense capture, monthly analytics, deterministic forecasting, and savings/DPS planning. The implementation first established a deployable Next.js skeleton, then completed each required flow with explicit acceptance checks. AI was restricted to receipt perception while finance logic stayed deterministic. The final build was hardened with editable AI output, failure states, month-aware calculations, local persistence, saved-expense edit/delete, production smoke testing, and regression validation against all 25 published P12 cases.
+
+---
+
+## 29. Team Contributions
+
+| Member | GitHub | Major contribution |
+| --- | --- | --- |
+| Johirul Islam Zim | johirul-islam-1 | Team lead. Built the P07 ReconFlow solution, including the reconciliation engine, UI workflow, integration, debugging, testing, and final project preparation. |
+| Fahad Hossain Touhid | FH-TOUHID | Built the P12 solution and handled its main implementation and development. |
+| Mohammad Hasibur Rahman | Hasib-2005 | Tested the P12 project locally, identified and reported bugs to the P12 developer, deployed the application to Vercel, and verified the deployment. |
+| Toufiqul Hossain Siam | siam1082 | Tested the P07 ReconFlow project locally, identified and reported bugs to the P07 developer, deployed the application to Render, and verified the deployment. |
+
+---
+
+## 30. Submission Metadata
 
 ```text
 Team ID: LSH26-T022
@@ -1053,40 +1159,43 @@ Repository: https://github.com/johirul-islam-1/lsh26-t022-p12
 Live URL: https://lsh26-t022-p12.vercel.app
 ```
 
-Final submission should use the exact commit SHA required by the event submission form.
+The official submission form should use the exact final 40-character commit SHA selected for judging.
 
 ---
 
-## 25. Team Contributions
+## 31. Future Roadmap
 
-- **FH-TOUHID** — P12 implementation, integration, testing and deployment.
-- **Johirul Islam** — repository ownership / team coordination.
+A production version could add:
 
-If additional registered members contributed to this repository, add their exact contribution before any permitted documentation freeze.
+- authenticated accounts;
+- managed database;
+- cross-device synchronization;
+- encrypted receipt archive;
+- recurring bills;
+- CSV/bank statement import;
+- duplicate detection;
+- category budgets;
+- contribution history;
+- current saved balance per pocket;
+- multiple savings products;
+- institution-specific DPS terms;
+- long-history forecasting;
+- confidence intervals;
+- anomaly detection;
+- exports/reports;
+- API rate limiting;
+- monitoring and audit logs.
 
 ---
 
-## 26. License Information
+## Closing
 
-Third-party framework, library and package licensing is documented in:
+Ledgerly is designed around a simple principle:
 
-```text
-LICENSES.md
-```
+> **Recording spending is only valuable when the ledger helps the user decide what to do next.**
 
-The project does not rely on a third-party UI template or bundled third-party image asset for the core interface.
-
----
-
-## 27. Closing
-
-Ledgerly is built around a simple idea:
-
-> **Recording spending is only useful when the ledger helps the user decide what to do next.**
-
-Receipt extraction reduces input friction.  
-Monthly analytics create awareness.  
-Forecasting creates foresight.  
-Savings pockets turn that foresight into a concrete plan.
-
-The result is a small, explainable personal finance system that connects transaction capture to month-end decisions without making deterministic financial logic dependent on generative AI.
+Receipt extraction reduces input friction.
+Monthly analytics create awareness.
+Forecasting creates foresight.
+Expense editing keeps the ledger correct.
+Savings pockets convert expected surplus into a concrete plan.

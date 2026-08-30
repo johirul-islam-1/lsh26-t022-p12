@@ -1,23 +1,17 @@
 # Event Start Record
 
-- **Team ID:** LSH26-T022
-- **Problem ID:** P12
-- **Repository:** lsh26-t022-p12
-- **Event start code:** LSH26-8490-C900
-- **Repository created before release:** No
+- Team ID: `LSH26-T022`
+- Problem ID: `P12`
+- Event start code: `LSH26-8490-C900`
 
 ## Material present before 6:00 PM
 
-List every scaffold, template, configuration, asset or file already present before the event started.
+None.
 
 | Material | Source or original location | What was already present |
-|---|---|---|
-| None | N/A | Repository was not created before the event |
+| --- | --- | --- |
+| None | N/A | Repository contained no P12 solution material before the problem release. |
 
-## Declaration
+P12-specific implementation, domain logic, UI, receipt workflow, finance calculations and documentation were developed during the event work.
 
-This file was added in the first event-work commit.
-
-No problem-specific implementation was present in this repository before the event started.
-
-The team will preserve the repository history until results are announced.
+This file is the event-start declaration. Repository history must remain preserved until results are announced.

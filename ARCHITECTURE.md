@@ -1,86 +1,221 @@
-# Architecture — Ledgerly P12 Competition Build
+# Ledgerly Architecture
 
-## System shape
+**Team:** LSH26-T022
+**Problem:** P12 — Personal Ledger Manager
+**Live:** https://lsh26-t022-p12.vercel.app
 
-```text
-Next.js App Router
-│
-├── Client ledger UI
-│   ├── salary editor
-│   ├── manual expense editor
-│   ├── receipt review editor
-│   ├── active-month navigation
-│   ├── category / largest-expense analytics
-│   ├── deterministic forecast + insights
-│   └── savings pockets + DPS illustration
-│
-├── Browser localStorage
-│   └── salary, expenses, pockets, DPS rate, ledger date
-│
-└── /api/receipt (Node.js runtime)
-    ├── validates file existence/type/size
-    ├── Google Gen AI multimodal extraction
-    ├── retries transient 408/429/5xx failures
-    ├── model fallback for temporary provider load
-    ├── structured response
-    └── Zod validation
+## 1. Architecture Summary
+
+Ledgerly is a Next.js application with a browser-resident ledger, a deterministic TypeScript finance engine, and one server endpoint for receipt-image extraction.
+
+```mermaid
+flowchart LR
+    USER[User]
+
+    subgraph BROWSER["Browser"]
+        UI["React / Next.js UI"]
+        STORAGE[("localStorage")]
+        FIN["Deterministic finance engine"]
+    end
+
+    subgraph SERVER["Next.js server"]
+        RECEIPT["/api/receipt"]
+        VALIDATION["File + response validation"]
+    end
+
+    AI["Google Gemini"]
+
+    USER --> UI
+    UI <--> STORAGE
+    UI --> FIN
+    UI --> RECEIPT
+    RECEIPT --> VALIDATION
+    VALIDATION --> AI
+    AI --> RECEIPT
+    RECEIPT --> UI
 ```
 
-## Domain calculations
+## 2. Core Design Boundary
 
-### Monthly dashboard
+AI is limited to receipt perception.
 
-Expenses are filtered by `YYYY-MM`. Totals are accumulated in paisa-oriented integer form before formatting back to BDT.
+```text
+AI responsibilities
+└── receipt amount/date/shop/category extraction
+
+Deterministic TypeScript responsibilities
+├── money totals
+├── month filtering
+├── category aggregation
+├── largest expenses
+├── previous-month comparison
+├── forecasting
+├── written insights
+├── savings affordability
+├── goal completion
+└── DPS compounding
+```
+
+This prevents generative output from becoming authoritative financial arithmetic.
+
+## 3. Client State
+
+The ledger is persisted under:
+
+```text
+ledgerly-state-v1
+```
+
+The persisted state contains the source data. Analytics are derived from it and recomputed after mutations.
+
+```text
+LedgerState
+├── today
+├── salaryBdt
+├── expenses[]
+├── pockets[]
+└── dpsAnnualRatePercent
+```
+
+## 4. Expense Mutation Model
+
+### Create
+
+```text
+validated form / reviewed receipt
+  → append expense
+  → persist ledger
+  → recompute derived views
+```
+
+### Edit
+
+```text
+select saved expense
+  → prefilled edit form
+  → replace matching expense by ID
+  → persist
+  → recompute
+```
+
+### Delete
+
+```text
+select saved expense
+  → confirmation
+  → filter expense by ID
+  → persist
+  → recompute
+```
+
+No separate analytics cache is maintained, reducing stale-data risk.
+
+## 5. Receipt Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Client
+    participant A as /api/receipt
+    participant G as Gemini
+
+    U->>C: Choose receipt image
+    C->>A: multipart/form-data
+    A->>A: Validate type and <= 8 MB
+    A->>G: Image + structured extraction prompt
+    G-->>A: JSON extraction
+    A->>A: Validate + normalize
+    A-->>C: Editable receipt draft
+    C-->>U: Review fields
+    U->>C: Correct + save
+    C->>C: Persist expense and recalculate
+```
+
+## 6. Finance Engine
+
+`src/lib/finance.ts` is independent of the receipt provider.
+
+Key functions include:
+
+- monthly dashboard aggregation;
+- pace-based current-month forecast;
+- deterministic insights;
+- integer-paisa DPS compounding;
+- savings affordability and completion projection.
 
 ### Forecast
 
-For an in-progress month:
-
 ```text
-projected spend = spent so far / elapsed days × days in month
-expected remaining spend = max(projected spend - spent so far, 0)
-projected balance = salary - projected spend
+projectedSpend
+= spentSoFar / elapsedDays × daysInMonth
 ```
 
-Completed months use actual spend; future/empty months do not invent spending.
-
-### Written insights
-
-Insights are deterministic and are generated from actual category totals, previous-month amounts and largest transactions. They always include real BDT amounts rather than generic language.
-
-### Forecast-aware savings
-
 ```text
-forecast savings budget = max(projected month-end balance, 0)
-funding ratio = min(1, forecast savings budget / total planned pocket contributions)
-effective pocket contribution = planned contribution × funding ratio
-months to target = ceil(target / effective contribution)
+projectedBalance
+= salary - projectedSpend
 ```
 
-This lets goal dates move later when the spending forecast cannot safely support the full savings plan.
+### Savings affordability
+
+```text
+forecastSavingsBudget = max(projectedBalance, 0)
+```
+
+If planned contributions exceed the budget, contributions are proportionally reduced using a funding ratio.
 
 ### DPS
 
-For each month:
+Each monthly cycle:
 
 ```text
 balance += deposit
-interest = round_half_up(balance × annual_rate / 12 / 100, to paisa)
+interest = half_up_to_paisa(balance × annualRate / 12 / 100)
 balance += interest
 ```
 
-Interest compounds because each later month starts from the interest-inclusive balance.
+## 7. Failure Isolation
 
-## Reliability choices
+Receipt AI failure does not invalidate the core ledger.
 
-- Server-side API key isolation.
-- File allow-list and 8 MB receipt limit.
-- Structured response + Zod validation.
-- Retry/fallback for transient AI outages.
-- Manual expense entry remains available when OCR is unavailable.
-- Local data persistence survives refresh.
-- Build 0 and Build 1 stable Git tags preserve rollback points.
+```text
+Gemini unavailable
+├── receipt scan: degraded
+└── manual entry/dashboard/forecast/savings: still available
+```
 
-## Deliberate non-features
+Client UX provides editable results, errors and retry paths rather than silent failure.
 
-Authentication, a database, account sync and enterprise infrastructure were intentionally omitted because they are not required by P12 and would add event-time deployment risk without improving the four required MVP flows.
+## 8. Persistence Choice
+
+`localStorage` was selected for hackathon reliability:
+
+- no database provisioning;
+- no auth dependency;
+- instant persistence;
+- simple production deployment.
+
+Trade-off: state is device/browser-specific.
+
+## 9. Security
+
+- Gemini API key stays server-side.
+- `.env.local` is not committed.
+- image MIME and file size are validated.
+- structured AI output is validated before use.
+- no real bank/DPS account is connected.
+- savings outputs are illustrative.
+
+## 10. Verification
+
+The final finance implementation was locally checked against all 25 supplied P12 public cases and passed 25/25.
+
+Release gates:
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+git diff --check
+```
+
+Production smoke checks cover the receipt route, ledger mutations, persistence, analytics, forecast and savings/DPS flows.

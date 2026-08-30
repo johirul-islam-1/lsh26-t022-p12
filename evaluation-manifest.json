@@ -1,77 +1,109 @@
 {
+  "release_version": "2.2",
   "team_id": "LSH26-T022",
   "problem_id": "P12",
-  "project_name": "Ledgerly",
+  "repository_name": "lsh26-t022-p12",
   "live_url": "https://lsh26-t022-p12.vercel.app",
-  "repository_url": "https://github.com/johirul-islam-1/lsh26-t022-p12",
-  "app_entry": "/",
-  "healthcheck": {
-    "method": "GET",
-    "path": "/api/receipt",
-    "expected": {
-      "ok": true,
-      "geminiConfigured": true
+  "demo_video_url_optional": "",
+  "event_start_code": "LSH26-8490-C900",
+  "repository_created_before_release": false,
+  "pre_event_materials": [],
+  "sample_data": {
+    "loads_published_fixture": false,
+    "method": "typed entry / seeded on start",
+    "reset_instructions": "Use a fresh/incognito browser, or remove the localStorage key ledgerly-state-v1 and reload. Published fixture values can be entered through the salary/expense/pocket controls."
+  },
+  "problem_solving_method": "The team split P12 into four independently verifiable flows: expense capture, monthly analytics, deterministic forecasting, and savings/DPS planning. AI was restricted to receipt perception while all financial calculations stayed deterministic. The build was completed incrementally, then hardened with editable AI output, month-aware state, local persistence, saved-expense edit/delete, production smoke tests, and regression validation against all 25 published P12 cases.",
+  "requirements": {
+    "R1": {
+      "status": "complete",
+      "evidence": "Live UI: Add expense and Scan receipt with editable extraction before save. Code: src/app/page.tsx and src/app/api/receipt/route.ts."
+    },
+    "R2": {
+      "status": "complete",
+      "evidence": "Live dashboard: spent vs salary, available balance, category breakdown, largest expenses, previous-month comparison and month navigation. Code: src/app/page.tsx and src/lib/finance.ts."
+    },
+    "R3": {
+      "status": "complete",
+      "evidence": "Live Forecast & insights section: projected spend, expected remaining spend, expected money left/shortfall and at least three amount-backed written insights. Code: src/app/page.tsx and src/lib/finance.ts."
+    },
+    "R4": {
+      "status": "complete",
+      "evidence": "Live Savings pockets section: target/item/monthly contribution, forecast-adjusted contribution, completion date, editable DPS rate and compounded DPS return. Code: src/app/page.tsx and src/lib/finance.ts."
     }
   },
-  "runtime": {
-    "node": ">=20",
-    "framework": "Next.js 16",
-    "install": "npm install",
-    "typecheck": "npm run typecheck",
-    "lint": "npm run lint",
-    "build": "npm run build",
-    "dev": "npm run dev"
-  },
-  "environment": [
+  "team_members": [
     {
-      "name": "GEMINI_API_KEY",
-      "required_for": "receipt OCR",
-      "exposure": "server-only"
+      "registered_name": "Johirul Islam Zim",
+      "github_username": "johirul-islam-1",
+      "major_contribution": "Team lead. Built the P07 ReconFlow solution, including the reconciliation engine, UI workflow, integration, debugging, testing, and final project preparation.",
+      "evidence_paths_or_commits": [
+        "Contribution is primarily in the team's separate P07 repository."
+      ]
     },
     {
-      "name": "GEMINI_MODEL",
-      "required_for": "preferred receipt OCR model",
-      "default": "gemini-3.7-flash",
-      "exposure": "server-only"
+      "registered_name": "Fahad Hossain Touhid",
+      "github_username": "FH-TOUHID",
+      "major_contribution": "Built the P12 solution and handled its main implementation and development.",
+      "evidence_paths_or_commits": [
+        "src/app/page.tsx",
+        "src/app/api/receipt/route.ts",
+        "src/lib/finance.ts",
+        "src/lib/types.ts",
+        "README.md",
+        "ARCHITECTURE.md"
+      ]
+    },
+    {
+      "registered_name": "Mohammad Hasibur Rahman",
+      "github_username": "Hasib-2005",
+      "major_contribution": "Tested the P12 project locally, identified and reported bugs to the P12 developer, deployed the application to Vercel, and verified the deployment.",
+      "evidence_paths_or_commits": [
+        "https://lsh26-t022-p12.vercel.app",
+        "Local and production verification contribution; not represented by a single source path."
+      ]
+    },
+    {
+      "registered_name": "Toufiqul Hossain Siam",
+      "github_username": "siam1082",
+      "major_contribution": "Tested the P07 ReconFlow project locally, identified and reported bugs to the P07 developer, deployed the application to Render, and verified the deployment.",
+      "evidence_paths_or_commits": [
+        "Contribution is primarily in the team's separate P07 repository and deployment."
+      ]
     }
   ],
-  "required_mvp": [
+  "major_design_decisions": [
+    "Use Gemini only for receipt-image perception; keep dashboard, forecast, insights, savings and DPS calculations deterministic in TypeScript.",
+    "Require editable human confirmation of extracted receipt values before saving.",
+    "Use browser localStorage for hackathon persistence to avoid unnecessary database/auth deployment risk.",
+    "Keep the ledger month-aware so historical and current expenses are not silently mixed.",
+    "Use integer-paisa handling and half-up monthly interest rounding for DPS calculations.",
+    "Use an explainable pace forecast: spent so far divided by elapsed days multiplied by days in the month.",
+    "Scale savings-pocket contributions proportionally when the forecast month-end savings budget cannot support all requested contributions.",
+    "Expose saved-expense edit/delete through View all transaction history while keeping aggregate dashboard cards read-only."
+  ],
+  "known_limitations": [
+    "Ledger data is stored in browser localStorage and does not synchronize across devices.",
+    "No authentication, cloud backup or multi-user collaboration is included.",
+    "Receipt extraction quality and availability depend on the external Gemini service and image quality.",
+    "The spending forecast is a deterministic pace estimate rather than a long-history statistical model.",
+    "Savings pockets do not transfer real money.",
+    "DPS output is illustrative and does not model bank-specific taxes, fees or product conditions.",
+    "No automatic bank/payment transaction import or recurring-expense engine is included.",
+    "Production-scale rate limiting and abuse controls are outside the hackathon scope."
+  ],
+  "ai_tools_used": [
     {
-      "id": 1,
-      "name": "salary_expenses_receipt",
-      "proof": "Edit salary; add a manual expense; scan a receipt; review and correct amount/date/shop/category before saving."
+      "tool": "OpenAI ChatGPT",
+      "used_for": "Implementation planning, code drafting/review, debugging assistance, test-harness assistance, architecture and documentation drafting.",
+      "how_output_was_verified": "Team review plus npm run typecheck, npm run lint, npm run build, manual local/production smoke testing, and a 25/25 regression run against the published P12 public cases."
     },
     {
-      "id": 2,
-      "name": "monthly_dashboard",
-      "proof": "Use month navigation to inspect spend vs salary, category breakdown, largest expenses and previous-month comparison."
-    },
-    {
-      "id": 3,
-      "name": "forecast_insights",
-      "proof": "Inspect projected month spend, expected remaining spend, expected money left/shortfall and three amount-backed written insights."
-    },
-    {
-      "id": 4,
-      "name": "savings_pockets_dps",
-      "proof": "Create a pocket and inspect forecast-adjusted contribution, expected completion date and DPS value at the stated editable annual rate."
+      "tool": "Google Gemini via @google/genai",
+      "used_for": "Runtime receipt-image extraction of amount, date, shop, category and confidence.",
+      "how_output_was_verified": "Structured response schema, server-side validation, category normalization, editable user confirmation before save, and manual deployed receipt-flow testing."
     }
   ],
-  "receipt_limits": {
-    "accepted_mime_types": [
-      "image/jpeg",
-      "image/png",
-      "image/webp"
-    ],
-    "max_bytes": 8388608
-  },
-  "persistence": "browser localStorage",
-  "forecast_method": "spent_so_far / elapsed_days * days_in_month",
-  "dps_rule": "Each month add deposit first, calculate annualRate/12 monthly interest on the balance, round half-up to paisa, then add interest to balance for compounding.",
-  "limitations": [
-    "No cross-device/account sync.",
-    "Receipt OCR depends on an external Gemini service.",
-    "Forecast is a deterministic pace projection, not financial advice.",
-    "DPS output is an illustration, not a bank quote."
-  ]
+  "licenses_file": "LICENSES.md",
+  "declaration": "The information above is complete and truthful to the best of the team's knowledge."
 }
