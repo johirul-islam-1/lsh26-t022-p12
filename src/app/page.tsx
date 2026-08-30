@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getDemoLedger } from "@/lib/demo";
-import { getDashboardFixture, money } from "@/lib/finance";
+import { getDashboardFixture, getForecastFixture, money } from "@/lib/finance";
 import { CATEGORIES, type LedgerState, type ReceiptDraft } from "@/lib/types";
 
 const initialLedger = getDemoLedger();
@@ -113,6 +113,7 @@ export default function Home() {
   }, []);
 
   const dashboard = useMemo(() => getDashboardFixture(ledger, activeMonth), [ledger, activeMonth]);
+  const forecast = useMemo(() => getForecastFixture(ledger, activeMonth), [ledger, activeMonth]);
   const positiveChange = dashboard.changePercent >= 0;
   const hasPreviousMonthSpending = dashboard.previousSpent > 0;
   const activeMonthLabel = monthLabel(activeMonth);
@@ -279,7 +280,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-note">
           <strong>Build 1</strong>
-          <span>Salary + manual + receipt expense capture enabled.</span>
+          <span>Expense capture, dashboard analytics and deterministic forecast enabled.</span>
         </div>
       </aside>
 
@@ -410,13 +411,63 @@ export default function Home() {
         </section>
 
         <section className="panel forecast-panel" id="forecast">
-          <div className="panel-heading"><div><p className="eyebrow">NEXT BUILD</p><h2>Forecast & insights</h2></div><Sparkles size={20} /></div>
-          <div className="empty-feature compact-empty">
-            <div className="empty-icon"><Sparkles size={22} /></div>
+          <div className="panel-heading">
             <div>
-              <h3>Deterministic forecast engine plugs in here</h3>
-              <p>Next we calculate month-end spend, projected balance and 3+ amount-specific insights from real ledger data.</p>
+              <p className="eyebrow">{forecast.isCompletedMonth ? "MONTH REVIEW" : "PACE FORECAST"}</p>
+              <h2>Forecast & insights</h2>
             </div>
+            <Sparkles size={20} />
+          </div>
+
+          <div className="forecast-grid" aria-label={`Forecast for ${activeMonthLabel}`}>
+            <div className="forecast-metric">
+              <span>{forecast.isCompletedMonth ? "Final month spend" : "Projected month spend"}</span>
+              <strong>{money(forecast.projectedSpend)}</strong>
+              <small>{forecast.isCompletedMonth ? "Completed month — actual total" : `${money(forecast.dailyPace)} average per elapsed day`}</small>
+            </div>
+
+            <div className="forecast-metric">
+              <span>Expected remaining spend</span>
+              <strong>{money(forecast.expectedRemainingSpend)}</strong>
+              <small>{forecast.isCompletedMonth ? "No days remaining in this month" : `${forecast.totalDays - forecast.elapsedDays} day${forecast.totalDays - forecast.elapsedDays === 1 ? "" : "s"} remaining`}</small>
+            </div>
+
+            <div className={`forecast-metric ${forecast.projectedBalance < 0 ? "forecast-danger" : "forecast-positive"}`}>
+              <span>{forecast.projectedBalance < 0 ? "Expected shortfall" : "Expected money left"}</span>
+              <strong>{money(Math.abs(forecast.projectedBalance))}</strong>
+              <small>Salary {money(ledger.salaryBdt)} minus projected spending</small>
+            </div>
+          </div>
+
+          <div className="forecast-context">
+            <span>{forecast.isCompletedMonth ? `${activeMonthLabel} is complete.` : `Using ${forecast.elapsedDays} of ${forecast.totalDays} elapsed days.`}</span>
+            <strong>{money(forecast.spentSoFar)} recorded</strong>
+          </div>
+
+          <div className="insight-section">
+            <div className="insight-heading">
+              <div>
+                <p className="eyebrow">NUMBER-BACKED NOTES</p>
+                <h3>What stands out</h3>
+              </div>
+              <span>{forecast.insights.length ? `${forecast.insights.length} insights` : "Waiting for expenses"}</span>
+            </div>
+
+            {forecast.insights.length ? (
+              <div className="insight-grid">
+                {forecast.insights.map((insight, index) => (
+                  <div className="insight-card" key={`${activeMonth}-${index}`}>
+                    <span className="insight-number">0{index + 1}</span>
+                    <p>{insight}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="forecast-empty">
+                <Sparkles size={19} />
+                <p>Add an expense in {activeMonthLabel} to generate category-specific insights.</p>
+              </div>
+            )}
           </div>
         </section>
 
