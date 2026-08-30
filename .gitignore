@@ -6,3 +6,10 @@ out
 .env.production
 *.log
 .DS_Store
+.vercel
+
+# Editor swap files
+*.swp
+
+# TypeScript build cache
+*.tsbuildinfo
