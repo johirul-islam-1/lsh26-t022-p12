@@ -154,3 +154,16 @@ h2 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
   .confidence-row, .field-error, .modal-actions { grid-column: auto; }
   .modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
+
+/* Build 1 manual expense + salary controls */
+.metric-footer-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.metric-footer-row p { margin: 0; }
+.metric-action { flex: 0 0 auto; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.metric-action:hover { opacity: .65; }
+.metric-action:focus-visible { outline: 3px solid rgba(126, 166, 0, .22); outline-offset: 3px; border-radius: 4px; }
+.salary-modal { width: min(470px, 100%); }
+.salary-form { grid-template-columns: 1fr; }
+.form-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) {
+  .metric-footer-row { align-items: flex-start; }
+}

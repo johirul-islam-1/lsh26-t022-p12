@@ -22,7 +22,8 @@ import { CATEGORIES, type LedgerState, type ReceiptDraft } from "@/lib/types";
 
 const initialLedger = getDemoLedger();
 const STORAGE_KEY = "ledgerly-state-v1";
-const emptyDraft: ReceiptDraft = {
+
+const emptyReceiptDraft: ReceiptDraft = {
   amountBdt: null,
   date: null,
   shop: null,
@@ -32,14 +33,36 @@ const emptyDraft: ReceiptDraft = {
 
 type ScanStatus = "idle" | "reading" | "review" | "error";
 
+type ManualExpenseDraft = {
+  amountBdt: number | null;
+  date: string;
+  shop: string;
+  category: string;
+};
+
+function makeManualDraft(date: string): ManualExpenseDraft {
+  return {
+    amountBdt: null,
+    date,
+    shop: "",
+    category: "Other",
+  };
+}
+
 export default function Home() {
   const [ledger, setLedger] = useState<LedgerState>(initialLedger);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanStatus, setScanStatus] = useState<ScanStatus>("idle");
   const [scanError, setScanError] = useState("");
-  const [draft, setDraft] = useState<ReceiptDraft>(emptyDraft);
+  const [draft, setDraft] = useState<ReceiptDraft>(emptyReceiptDraft);
   const [fileName, setFileName] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualDraft, setManualDraft] = useState<ManualExpenseDraft>(() => makeManualDraft(initialLedger.today));
+  const [salaryOpen, setSalaryOpen] = useState(false);
+  const [salaryInput, setSalaryInput] = useState(String(initialLedger.salaryBdt));
+  const [salaryError, setSalaryError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
 useEffect(() => {
@@ -65,6 +88,94 @@ useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
+function appendExpense(expense: {
+  amountBdt: number;
+  date: string;
+  shop: string;
+  category: string;
+}) {
+  const nextToday =
+    expense.date > ledger.today
+      ? expense.date
+      : ledger.today;
+
+  const next: LedgerState = {
+    ...ledger,
+    today: nextToday,
+    expenses: [
+      ...ledger.expenses,
+      {
+        id: `E-${Date.now()}`,
+        ...expense,
+      },
+    ],
+  };
+
+  persistLedger(next);
+}
+
+  function openManualExpense() {
+    setSavedMessage("");
+    setManualError("");
+    setManualDraft(makeManualDraft(ledger.today));
+    setManualOpen(true);
+  }
+
+  function saveManualExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const amount = Number(manualDraft.amountBdt);
+    const date = manualDraft.date.trim();
+    const shop = manualDraft.shop.trim();
+    const category = manualDraft.category.trim() || "Other";
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setManualError("Enter an expense amount greater than zero.");
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setManualError("Choose a valid expense date.");
+      return;
+    }
+
+    if (!shop) {
+      setManualError("Enter a shop, merchant or expense name.");
+      return;
+    }
+
+    appendExpense({ amountBdt: amount, date, shop, category });
+    setManualOpen(false);
+    setManualError("");
+    setSavedMessage(`Saved ${money(amount)} from ${shop}.`);
+  }
+
+  function openSalaryEditor() {
+    setSavedMessage("");
+    setSalaryError("");
+    setSalaryInput(String(ledger.salaryBdt));
+    setSalaryOpen(true);
+  }
+
+  function saveSalary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const salary = Number(salaryInput);
+
+    if (!Number.isFinite(salary) || salary <= 0) {
+      setSalaryError("Enter a monthly salary greater than zero.");
+      return;
+    }
+
+    persistLedger({
+      ...ledger,
+      salaryBdt: salary,
+    });
+
+    setSalaryOpen(false);
+    setSalaryError("");
+    setSavedMessage(`Monthly salary updated to ${money(salary)}.`);
+  }
+
   function openPicker() {
     setSavedMessage("");
     fileInputRef.current?.click();
@@ -72,7 +183,7 @@ useEffect(() => {
 
   async function scanReceipt(file: File) {
     setFileName(file.name);
-    setDraft(emptyDraft);
+    setDraft(emptyReceiptDraft);
     setScanError("");
     setScanStatus("reading");
     setScanOpen(true);
@@ -115,21 +226,7 @@ useEffect(() => {
       return;
     }
 
-    const next: LedgerState = {
-      ...ledger,
-      expenses: [
-        ...ledger.expenses,
-        {
-          id: `E-${Date.now()}`,
-          date,
-          shop,
-          category,
-          amountBdt: amount,
-        },
-      ],
-    };
-
-    persistLedger(next);
+    appendExpense({ amountBdt: amount, date, shop, category });
     setScanOpen(false);
     setScanStatus("idle");
     setScanError("");
@@ -148,7 +245,7 @@ useEffect(() => {
         </nav>
         <div className="sidebar-note">
           <strong>Build 1</strong>
-          <span>Receipt extraction + review + local save enabled.</span>
+          <span>Salary + manual + receipt expense capture enabled.</span>
         </div>
       </aside>
 
@@ -160,7 +257,7 @@ useEffect(() => {
             <p className="subtle">A receipt-first monthly view with forecasts and goal planning.</p>
           </div>
           <div className="actions">
-            <button className="button secondary" type="button" disabled title="Manual expense form is next in Build 1">
+            <button className="button secondary" type="button" onClick={openManualExpense}>
               <Plus size={17} /> Add expense
             </button>
             <button className="button primary" type="button" onClick={openPicker}>
@@ -184,8 +281,8 @@ useEffect(() => {
         {savedMessage ? <div className="success-banner" role="status">{savedMessage}</div> : null}
 
         <div className="foundation-banner" role="status">
-          <div><strong>Receipt scan:</strong> upload a JPG, PNG or WebP, verify the extracted fields, then save.</div>
-          <span>Gemini runs server-side; your API key is never sent to the browser.</span>
+          <div><strong>Expense capture:</strong> add an expense manually or scan a receipt and verify the extracted fields.</div>
+          <span>Everything saves locally in this browser; Gemini credentials stay server-side.</span>
         </div>
 
         <section className="hero-grid" aria-label="Monthly summary">
@@ -199,7 +296,10 @@ useEffect(() => {
           <article className="metric">
             <div className="metric-head"><span>Available now</span><Landmark size={18} /></div>
             <strong>{money(dashboard.remaining)}</strong>
-            <p>Salary minus recorded monthly spending</p>
+            <div className="metric-footer-row">
+              <p>Salary minus recorded monthly spending</p>
+              <button className="metric-action" type="button" onClick={openSalaryEditor}>Edit salary</button>
+            </div>
           </article>
 
           <article className="metric">
@@ -216,12 +316,12 @@ useEffect(() => {
               <button className="text-button" type="button" disabled>View all <ChevronRight size={16} /></button>
             </div>
             <div className="category-list">
-              {dashboard.categories.slice(0, 6).map((category) => (
+              {dashboard.categories.length ? dashboard.categories.slice(0, 6).map((category) => (
                 <div className="category-row" key={category.name}>
                   <div className="category-copy"><span>{category.name}</span><small>{money(category.amount)}</small></div>
                   <div className="bar"><span style={{ width: `${Math.max(6, (category.amount / Math.max(dashboard.categories[0]?.amount ?? 1, 1)) * 100)}%` }} /></div>
                 </div>
-              ))}
+              )) : <p className="subtle">No expenses recorded for this month yet.</p>}
             </div>
           </article>
 
@@ -251,6 +351,120 @@ useEffect(() => {
           </div>
         </section>
       </section>
+
+      {manualOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="receipt-modal" role="dialog" aria-modal="true" aria-labelledby="manual-expense-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">NEW EXPENSE</p>
+                <h2 id="manual-expense-title">Add an expense</h2>
+                <p className="modal-file">Record a purchase without a receipt.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close manual expense form" onClick={() => setManualOpen(false)}>
+                <X size={19} />
+              </button>
+            </div>
+
+            <form className="receipt-form" onSubmit={saveManualExpense}>
+              <label>
+                Amount (BDT)
+                <input
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  type="number"
+                  value={manualDraft.amountBdt ?? ""}
+                  onChange={(event) => setManualDraft((current) => ({
+                    ...current,
+                    amountBdt: event.target.value === "" ? null : Number(event.target.value),
+                  }))}
+                  autoFocus
+                  required
+                />
+              </label>
+
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={manualDraft.date}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, date: event.target.value }))}
+                  required
+                />
+              </label>
+
+              <label>
+                Shop / expense name
+                <input
+                  type="text"
+                  value={manualDraft.shop}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, shop: event.target.value }))}
+                  placeholder="e.g. Bus fare"
+                  required
+                />
+              </label>
+
+              <label>
+                Category
+                <select
+                  value={manualDraft.category}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, category: event.target.value }))}
+                >
+                  {CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+
+              {manualError ? <p className="field-error" role="alert">{manualError}</p> : null}
+
+              <div className="modal-actions">
+                <button className="button secondary" type="button" onClick={() => setManualOpen(false)}>Cancel</button>
+                <button className="button primary" type="submit">Save expense</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {salaryOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="receipt-modal salary-modal" role="dialog" aria-modal="true" aria-labelledby="salary-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">MONTHLY INCOME</p>
+                <h2 id="salary-title">Set monthly salary</h2>
+                <p className="modal-file">Dashboard percentages and available balance update immediately.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close salary editor" onClick={() => setSalaryOpen(false)}>
+                <X size={19} />
+              </button>
+            </div>
+
+            <form className="receipt-form salary-form" onSubmit={saveSalary}>
+              <label className="form-wide">
+                Monthly salary (BDT)
+                <input
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  type="number"
+                  value={salaryInput}
+                  onChange={(event) => setSalaryInput(event.target.value)}
+                  autoFocus
+                  required
+                />
+              </label>
+
+              {salaryError ? <p className="field-error" role="alert">{salaryError}</p> : null}
+
+              <div className="modal-actions">
+                <button className="button secondary" type="button" onClick={() => setSalaryOpen(false)}>Cancel</button>
+                <button className="button primary" type="submit">Save salary</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {scanOpen ? (
         <div className="modal-backdrop" role="presentation">

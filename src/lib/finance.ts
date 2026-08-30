@@ -8,7 +8,8 @@ export function money(value: number) {
   return new Intl.NumberFormat("en-BD", {
     style: "currency",
     currency: "BDT",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
