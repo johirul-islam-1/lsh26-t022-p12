@@ -219,3 +219,43 @@ h2 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
   .forecast-metric { min-height: 116px; }
   .forecast-context { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
+
+/* Build 1 savings pockets + forecast-aware DPS planning */
+.savings-panel { margin-bottom: 14px; }
+.savings-heading { align-items: flex-start; }
+.savings-subtitle { max-width: 640px; margin-top: 5px; line-height: 1.45; }
+.savings-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.savings-summary > div { min-height: 104px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); display: flex; flex-direction: column; }
+.savings-summary span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.savings-summary strong { margin-top: 10px; font-size: 17px; letter-spacing: -.025em; }
+.savings-summary small { margin-top: auto; padding-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.rate-action { align-self: flex-start; margin-top: auto; padding-top: 8px; }
+.projection-grid { align-items: stretch; }
+.pocket-projection { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.pocket-title-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.pocket-title-row p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+.pocket-projection dl { margin: 0; }
+.pocket-projection dl div { min-width: 0; }
+.pocket-projection dd { white-space: normal; overflow-wrap: anywhere; }
+.goal-status { padding: 11px; border-radius: 10px; background: #f4f8ec; display: grid; gap: 4px; }
+.goal-status > span, .goal-date-row span, .dps-result span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .045em; }
+.goal-status > strong, .goal-date-row strong, .dps-result strong { font-size: 14px; letter-spacing: -.015em; }
+.goal-status > small, .goal-date-row small, .dps-result small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.goal-adjusted { background: #fff9e8; }
+.goal-paused { background: #fff4f1; border: 1px solid #efc6bd; }
+.goal-paused > strong { color: var(--danger); }
+.goal-date-row { padding: 11px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.goal-date-row > div { display: grid; gap: 4px; }
+.dps-result { display: grid; gap: 6px; margin-top: auto; padding: 11px; border-radius: 10px; background: #11170f; color: #fff; }
+.dps-result > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.dps-result span, .dps-result small { color: #b9c3b5; }
+.dps-result strong { color: #fff; white-space: nowrap; }
+.dps-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.5; }
+@media (max-width: 880px) {
+  .savings-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .savings-heading { gap: 10px; }
+  .savings-heading .button { width: 100%; justify-content: center; }
+  .dps-result > div { display: grid; gap: 4px; }
+}

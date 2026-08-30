@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getDemoLedger } from "@/lib/demo";
-import { getDashboardFixture, getForecastFixture, money } from "@/lib/finance";
+import { getDashboardFixture, getForecastFixture, getSavingsPocketPlan, money } from "@/lib/finance";
 import { CATEGORIES, type LedgerState, type ReceiptDraft } from "@/lib/types";
 
 const initialLedger = getDemoLedger();
@@ -39,6 +39,20 @@ type ManualExpenseDraft = {
   date: string;
   shop: string;
   category: string;
+};
+
+type PocketDraft = {
+  name: string;
+  item: string;
+  targetBdt: number | null;
+  monthlyContributionBdt: number | null;
+};
+
+const emptyPocketDraft: PocketDraft = {
+  name: "",
+  item: "",
+  targetBdt: null,
+  monthlyContributionBdt: null,
 };
 
 function makeManualDraft(date: string): ManualExpenseDraft {
@@ -92,6 +106,12 @@ export default function Home() {
   const [salaryOpen, setSalaryOpen] = useState(false);
   const [salaryInput, setSalaryInput] = useState(String(initialLedger.salaryBdt));
   const [salaryError, setSalaryError] = useState("");
+  const [pocketOpen, setPocketOpen] = useState(false);
+  const [pocketDraft, setPocketDraft] = useState<PocketDraft>(emptyPocketDraft);
+  const [pocketError, setPocketError] = useState("");
+  const [rateOpen, setRateOpen] = useState(false);
+  const [rateInput, setRateInput] = useState(String(initialLedger.dpsAnnualRatePercent));
+  const [rateError, setRateError] = useState("");
   const [activeMonth, setActiveMonth] = useState(() => monthFromDate(initialLedger.today));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +134,7 @@ export default function Home() {
 
   const dashboard = useMemo(() => getDashboardFixture(ledger, activeMonth), [ledger, activeMonth]);
   const forecast = useMemo(() => getForecastFixture(ledger, activeMonth), [ledger, activeMonth]);
+  const savingsPlan = useMemo(() => getSavingsPocketPlan(ledger), [ledger]);
   const positiveChange = dashboard.changePercent >= 0;
   const hasPreviousMonthSpending = dashboard.previousSpent > 0;
   const activeMonthLabel = monthLabel(activeMonth);
@@ -211,6 +232,72 @@ export default function Home() {
     setSavedMessage(`Monthly salary updated to ${money(salary)}.`);
   }
 
+  function openPocketEditor() {
+    setSavedMessage("");
+    setPocketError("");
+    setPocketDraft(emptyPocketDraft);
+    setPocketOpen(true);
+  }
+
+  function savePocket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = pocketDraft.name.trim();
+    const item = pocketDraft.item.trim();
+    const target = Number(pocketDraft.targetBdt);
+    const monthly = Number(pocketDraft.monthlyContributionBdt);
+
+    if (!name || !item) {
+      setPocketError("Add a pocket name and item details.");
+      return;
+    }
+
+    if (!Number.isFinite(target) || target <= 0 || !Number.isFinite(monthly) || monthly <= 0) {
+      setPocketError("Target and monthly contribution must be greater than zero.");
+      return;
+    }
+
+    persistLedger({
+      ...ledger,
+      pockets: [
+        ...ledger.pockets,
+        {
+          id: `SP-${Date.now()}`,
+          name,
+          item,
+          targetBdt: target,
+          monthlyContributionBdt: monthly,
+        },
+      ],
+    });
+
+    setPocketOpen(false);
+    setPocketError("");
+    setSavedMessage(`Created ${name} pocket with a ${money(target)} target.`);
+  }
+
+  function openRateEditor() {
+    setSavedMessage("");
+    setRateError("");
+    setRateInput(String(ledger.dpsAnnualRatePercent));
+    setRateOpen(true);
+  }
+
+  function saveDpsRate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const rate = Number(rateInput);
+
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      setRateError("Enter an annual DPS rate between 0% and 100%.");
+      return;
+    }
+
+    persistLedger({ ...ledger, dpsAnnualRatePercent: rate });
+    setRateOpen(false);
+    setRateError("");
+    setSavedMessage(`DPS illustration rate updated to ${rate.toFixed(2)}% per year.`);
+  }
+
   function openPicker() {
     setSavedMessage("");
     fileInputRef.current?.click();
@@ -280,7 +367,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-note">
           <strong>Build 1</strong>
-          <span>Expense capture, dashboard analytics and deterministic forecast enabled.</span>
+          <span>All four MVP flows enabled: expenses, dashboard, forecast and savings planning.</span>
         </div>
       </aside>
 
@@ -471,20 +558,90 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="panel" id="pockets">
-          <div className="panel-heading">
-            <div><p className="eyebrow">GOALS</p><h2>Savings pockets</h2></div>
-            <button className="button secondary small" type="button" disabled><Plus size={16} /> New pocket</button>
+        <section className="panel savings-panel" id="pockets">
+          <div className="panel-heading savings-heading">
+            <div>
+              <p className="eyebrow">GOALS</p>
+              <h2>Savings pockets</h2>
+              <p className="subtle savings-subtitle">Completion dates use the current spending forecast, so goal plans slow down automatically when the month is tight.</p>
+            </div>
+            <button className="button secondary small" type="button" onClick={openPocketEditor}><Plus size={16} /> New pocket</button>
           </div>
-          <div className="pocket-grid">
-            {ledger.pockets.map((pocket) => (
-              <div className="pocket" key={pocket.id}>
-                <div className="pocket-icon"><Target size={19} /></div>
-                <div><strong>{pocket.name}</strong><p>{pocket.item}</p></div>
-                <dl><div><dt>Target</dt><dd>{money(pocket.targetBdt)}</dd></div><div><dt>Monthly</dt><dd>{money(pocket.monthlyContributionBdt)}</dd></div></dl>
-              </div>
-            ))}
+
+          <div className="savings-summary">
+            <div>
+              <span>Forecast savings budget</span>
+              <strong>{money(savingsPlan.forecastSavingsBudget)} / month</strong>
+              <small>Projected salary left after this month&apos;s spending pace</small>
+            </div>
+            <div>
+              <span>Planned pocket contributions</span>
+              <strong>{money(savingsPlan.plannedMonthly)} / month</strong>
+              <small>{savingsPlan.fundingRatio >= 1 ? "All planned contributions fit the forecast." : `${(savingsPlan.fundingRatio * 100).toFixed(1)}% of planned contributions are affordable.`}</small>
+            </div>
+            <div>
+              <span>DPS illustration</span>
+              <strong>{savingsPlan.dpsAnnualRatePercent.toFixed(2)}% p.a.</strong>
+              <button className="metric-action rate-action" type="button" onClick={openRateEditor}>Edit rate</button>
+            </div>
           </div>
+
+          {savingsPlan.pockets.length ? (
+            <div className="pocket-grid projection-grid">
+              {savingsPlan.pockets.map((pocket) => (
+                <article className="pocket pocket-projection" key={pocket.id}>
+                  <div className="pocket-title-row">
+                    <div className="pocket-icon"><Target size={19} /></div>
+                    <div><strong>{pocket.name}</strong><p>{pocket.item}</p></div>
+                  </div>
+
+                  <dl>
+                    <div><dt>Target</dt><dd>{money(pocket.targetBdt)}</dd></div>
+                    <div><dt>Planned</dt><dd>{money(pocket.monthlyContributionBdt)} / mo</dd></div>
+                  </dl>
+
+                  {pocket.monthsToGoal ? (
+                    <>
+                      <div className={`goal-status ${pocket.fundingRatio < 1 ? "goal-adjusted" : ""}`}>
+                        <span>{pocket.fundingRatio < 1 ? "Forecast-adjusted contribution" : "Affordable contribution"}</span>
+                        <strong>{money(pocket.effectiveMonthlyContribution)} / month</strong>
+                        <small>{pocket.fundingRatio < 1 ? `Reduced from ${money(pocket.monthlyContributionBdt)} to keep all pockets within the forecast.` : "Your current forecast can support the full planned amount."}</small>
+                      </div>
+
+                      <div className="goal-date-row">
+                        <div>
+                          <span>Expected completion</span>
+                          <strong>{pocket.completionDate ? monthLabel(pocket.completionDate.slice(0, 7)) : "—"}</strong>
+                          <small>{pocket.monthsToGoal} month{pocket.monthsToGoal === 1 ? "" : "s"} at the forecast-adjusted contribution</small>
+                        </div>
+                      </div>
+
+                      <div className="dps-result">
+                        <div>
+                          <span>DPS value over the same time</span>
+                          <strong>{money(pocket.dps.balance)}</strong>
+                        </div>
+                        <small>{money(pocket.dps.deposited)} deposited + {money(pocket.dps.interest)} interest at {savingsPlan.dpsAnnualRatePercent.toFixed(2)}% p.a.</small>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="goal-status goal-paused">
+                      <span>Goal paused by forecast</span>
+                      <strong>No affordable monthly contribution</strong>
+                      <small>The current pace projects no money left after monthly spending. Reduce spending or increase salary to get a completion date.</small>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="forecast-empty">
+              <Target size={19} />
+              <p>Create a savings pocket to get a forecast-aware completion date and DPS comparison.</p>
+            </div>
+          )}
+
+          <p className="dps-note">DPS is an illustration, not a bank quote. Each month the deposit is added first, then monthly interest is calculated from the stated annual rate, rounded half-up to the paisa, and compounded into the balance.</p>
         </section>
       </section>
 
@@ -596,6 +753,74 @@ export default function Home() {
               <div className="modal-actions">
                 <button className="button secondary" type="button" onClick={() => setSalaryOpen(false)}>Cancel</button>
                 <button className="button primary" type="submit">Save salary</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {pocketOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="receipt-modal" role="dialog" aria-modal="true" aria-labelledby="pocket-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">NEW SAVINGS GOAL</p>
+                <h2 id="pocket-title">Create a savings pocket</h2>
+                <p className="modal-file">We will estimate its completion date from your current forecast.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close pocket form" onClick={() => setPocketOpen(false)}><X size={19} /></button>
+            </div>
+
+            <form className="receipt-form" onSubmit={savePocket}>
+              <label>
+                Pocket name
+                <input type="text" value={pocketDraft.name} onChange={(event) => setPocketDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Camera" autoFocus required />
+              </label>
+              <label>
+                Item details
+                <input type="text" value={pocketDraft.item} onChange={(event) => setPocketDraft((current) => ({ ...current, item: event.target.value }))} placeholder="e.g. Sony ZV-E10" required />
+              </label>
+              <label>
+                Target (BDT)
+                <input inputMode="decimal" min="0.01" step="0.01" type="number" value={pocketDraft.targetBdt ?? ""} onChange={(event) => setPocketDraft((current) => ({ ...current, targetBdt: event.target.value === "" ? null : Number(event.target.value) }))} required />
+              </label>
+              <label>
+                Planned monthly contribution
+                <input inputMode="decimal" min="0.01" step="0.01" type="number" value={pocketDraft.monthlyContributionBdt ?? ""} onChange={(event) => setPocketDraft((current) => ({ ...current, monthlyContributionBdt: event.target.value === "" ? null : Number(event.target.value) }))} required />
+              </label>
+
+              {pocketError ? <p className="field-error" role="alert">{pocketError}</p> : null}
+
+              <div className="modal-actions">
+                <button className="button secondary" type="button" onClick={() => setPocketOpen(false)}>Cancel</button>
+                <button className="button primary" type="submit">Create pocket</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {rateOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="receipt-modal salary-modal" role="dialog" aria-modal="true" aria-labelledby="dps-rate-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">DPS ASSUMPTION</p>
+                <h2 id="dps-rate-title">Set annual DPS rate</h2>
+                <p className="modal-file">This stated rate is used only for the savings comparison shown on each pocket.</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Close DPS rate editor" onClick={() => setRateOpen(false)}><X size={19} /></button>
+            </div>
+
+            <form className="receipt-form salary-form" onSubmit={saveDpsRate}>
+              <label className="form-wide">
+                Annual rate (%)
+                <input inputMode="decimal" min="0" max="100" step="0.01" type="number" value={rateInput} onChange={(event) => setRateInput(event.target.value)} autoFocus required />
+              </label>
+              {rateError ? <p className="field-error" role="alert">{rateError}</p> : null}
+              <div className="modal-actions">
+                <button className="button secondary" type="button" onClick={() => setRateOpen(false)}>Cancel</button>
+                <button className="button primary" type="submit">Save rate</button>
               </div>
             </form>
           </section>

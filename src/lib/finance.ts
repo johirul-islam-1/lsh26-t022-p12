@@ -170,3 +170,102 @@ export function getForecastFixture(state: LedgerState, selectedMonth?: string) {
     insights: insights.slice(0, 3),
   };
 }
+
+
+function roundHalfUpInteger(numerator: number, denominator: number) {
+  return Math.floor((numerator + denominator / 2) / denominator);
+}
+
+function addMonthsToMonthEnd(date: string, months: number) {
+  const [year, monthNumber] = date.slice(0, 7).split("-").map(Number);
+  const target = new Date(Date.UTC(year, monthNumber - 1 + Math.max(months - 1, 0) + 1, 0));
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(target.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function calculateDpsReturn(monthlyDepositBdt: number, months: number, annualRatePercent: number) {
+  const depositPaisa = Math.max(0, toPaisa(monthlyDepositBdt));
+  const rateBasisPoints = Math.max(0, Math.round(annualRatePercent * 100));
+  const monthlyRateDenominator = 120000;
+
+  let balancePaisa = 0;
+  let depositedPaisa = 0;
+
+  for (let month = 0; month < Math.max(0, months); month += 1) {
+    balancePaisa += depositPaisa;
+    depositedPaisa += depositPaisa;
+
+    const interestPaisa = roundHalfUpInteger(
+      balancePaisa * rateBasisPoints,
+      monthlyRateDenominator,
+    );
+
+    balancePaisa += interestPaisa;
+  }
+
+  const balance = balancePaisa / 100;
+  const deposited = depositedPaisa / 100;
+
+  return {
+    balance: roundMoney(balance),
+    deposited: roundMoney(deposited),
+    interest: roundMoney(balance - deposited),
+  };
+}
+
+export function getSavingsPocketPlan(state: LedgerState) {
+  const currentMonth = monthKey(state.today);
+  const forecast = getForecastFixture(state, currentMonth);
+  const forecastSavingsBudget = roundMoney(Math.max(forecast.projectedBalance, 0));
+  const plannedMonthly = sumExpenses(
+    state.pockets.map((pocket) => ({
+      id: pocket.id,
+      date: state.today,
+      category: "Savings",
+      shop: pocket.name,
+      amountBdt: pocket.monthlyContributionBdt,
+    })),
+  );
+
+  const fundingRatio = plannedMonthly > 0
+    ? Math.min(1, forecastSavingsBudget / plannedMonthly)
+    : 0;
+
+  const pockets = state.pockets.map((pocket) => {
+    const effectiveMonthlyContribution = roundMoney(
+      pocket.monthlyContributionBdt * fundingRatio,
+    );
+    const targetPaisa = toPaisa(pocket.targetBdt);
+    const effectivePaisa = toPaisa(effectiveMonthlyContribution);
+    const monthsToGoal = effectivePaisa > 0
+      ? Math.max(1, Math.ceil(targetPaisa / effectivePaisa))
+      : null;
+    const completionDate = monthsToGoal
+      ? addMonthsToMonthEnd(state.today, monthsToGoal)
+      : null;
+    const dps = monthsToGoal
+      ? calculateDpsReturn(
+          effectiveMonthlyContribution,
+          monthsToGoal,
+          state.dpsAnnualRatePercent,
+        )
+      : { balance: 0, deposited: 0, interest: 0 };
+
+    return {
+      ...pocket,
+      effectiveMonthlyContribution,
+      fundingRatio,
+      monthsToGoal,
+      completionDate,
+      dps,
+    };
+  });
+
+  return {
+    currentMonth,
+    forecastSavingsBudget,
+    plannedMonthly: roundMoney(plannedMonthly),
+    fundingRatio,
+    dpsAnnualRatePercent: state.dpsAnnualRatePercent,
+    pockets,
+  };
+}
