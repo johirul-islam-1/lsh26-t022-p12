@@ -1,0 +1,77 @@
+{
+  "team_id": "LSH26-T022",
+  "problem_id": "P12",
+  "project_name": "Ledgerly",
+  "live_url": "https://lsh26-t022-p12.vercel.app",
+  "repository_url": "https://github.com/johirul-islam-1/lsh26-t022-p12",
+  "app_entry": "/",
+  "healthcheck": {
+    "method": "GET",
+    "path": "/api/receipt",
+    "expected": {
+      "ok": true,
+      "geminiConfigured": true
+    }
+  },
+  "runtime": {
+    "node": ">=20",
+    "framework": "Next.js 16",
+    "install": "npm install",
+    "typecheck": "npm run typecheck",
+    "lint": "npm run lint",
+    "build": "npm run build",
+    "dev": "npm run dev"
+  },
+  "environment": [
+    {
+      "name": "GEMINI_API_KEY",
+      "required_for": "receipt OCR",
+      "exposure": "server-only"
+    },
+    {
+      "name": "GEMINI_MODEL",
+      "required_for": "preferred receipt OCR model",
+      "default": "gemini-3.7-flash",
+      "exposure": "server-only"
+    }
+  ],
+  "required_mvp": [
+    {
+      "id": 1,
+      "name": "salary_expenses_receipt",
+      "proof": "Edit salary; add a manual expense; scan a receipt; review and correct amount/date/shop/category before saving."
+    },
+    {
+      "id": 2,
+      "name": "monthly_dashboard",
+      "proof": "Use month navigation to inspect spend vs salary, category breakdown, largest expenses and previous-month comparison."
+    },
+    {
+      "id": 3,
+      "name": "forecast_insights",
+      "proof": "Inspect projected month spend, expected remaining spend, expected money left/shortfall and three amount-backed written insights."
+    },
+    {
+      "id": 4,
+      "name": "savings_pockets_dps",
+      "proof": "Create a pocket and inspect forecast-adjusted contribution, expected completion date and DPS value at the stated editable annual rate."
+    }
+  ],
+  "receipt_limits": {
+    "accepted_mime_types": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "max_bytes": 8388608
+  },
+  "persistence": "browser localStorage",
+  "forecast_method": "spent_so_far / elapsed_days * days_in_month",
+  "dps_rule": "Each month add deposit first, calculate annualRate/12 monthly interest on the balance, round half-up to paisa, then add interest to balance for compounding.",
+  "limitations": [
+    "No cross-device/account sync.",
+    "Receipt OCR depends on an external Gemini service.",
+    "Forecast is a deterministic pace projection, not financial advice.",
+    "DPS output is an illustration, not a bank quote."
+  ]
+}
